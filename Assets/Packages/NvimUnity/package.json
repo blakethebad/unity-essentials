@@ -1,0 +1,10 @@
+{
+  "name": "com.nvimunity.editor",
+  "version": "1.0.0",
+  "displayName": "NvimUnity",
+  "description": "Neovim external code editor integration: script-editor registration, nvim sync pipe server, classic/SDK csproj generation, debugger wedge recovery.",
+  "unity": "2021.3",
+  "author": {
+    "name": "Bekir Anil Mavili"
+  }
+}

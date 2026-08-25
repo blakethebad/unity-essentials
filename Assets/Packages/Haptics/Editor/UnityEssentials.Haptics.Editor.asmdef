@@ -1,0 +1,18 @@
+{
+    "name": "UnityEssentials.Haptics.Editor",
+    "rootNamespace": "UnityEssentials.Haptics.Editor",
+    "references": [
+        "UnityEssentials.Haptics"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

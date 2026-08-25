@@ -1,0 +1,16 @@
+{
+    "name": "UnityEssentials.Haptics.Samples",
+    "rootNamespace": "UnityEssentials.Haptics.Samples",
+    "references": [
+        "UnityEssentials.Haptics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
