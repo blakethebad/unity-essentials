@@ -14,6 +14,7 @@ public class BoardController : MonoBehaviour
 	public float perObjectSpawnRadius = 2f;
 
 	[SerializeField] private float followStrength = 20f;
+	[SerializeField] private float markDuration = 1.5f;
 
 	private List<BoardEntity> _activeEntites;
 	private RaycastHit[] inputHits = new RaycastHit[10];
@@ -40,6 +41,7 @@ public class BoardController : MonoBehaviour
 				if(entity.transform.TryGetComponent<BoardEntity>(out var boardEntity))
 				{
 					_selectedEntity = boardEntity;
+					boardEntity.OnObjectSelectedWithInput();
 					_selectedEntityDistance = entity.distance;
 				}
 			}
@@ -49,7 +51,10 @@ public class BoardController : MonoBehaviour
 		if(Input.GetMouseButtonUp(0))
 		{
 			if(_selectedEntity != null)
+			{
+				_selectedEntity.OnObjectReleasedWithInput(markDuration);
 				_selectedEntity = null;
+			}
 		}
 
 	}
@@ -60,6 +65,12 @@ public class BoardController : MonoBehaviour
 		//If there is a selected entity we should move it toward the point under the mouse at the grab distance
 		if(_selectedEntity != null)
 		{
+			if(_selectedEntity.IsStored)
+			{
+				_selectedEntity = null;
+				return;
+			}
+
 			var mouseRay = Camera.main.ScreenPointToRay(Input.mousePosition);
 			var targetPosition = mouseRay.GetPoint(_selectedEntityDistance);
 			_selectedEntity.Rigidbody.linearVelocity = (targetPosition - _selectedEntity.Rigidbody.position) * followStrength;
@@ -73,14 +84,16 @@ public class BoardController : MonoBehaviour
 
 		_activeEntites = new List<BoardEntity>();
 
-		foreach(var entityPrefab in entityPrefabs)
+		for(var prefabIndex = 0; prefabIndex < entityPrefabs.Count; prefabIndex++)
 		{
 			for(var i = 0; i < 24; i++)
 			{
 				var objectPosition = GenerateRandomObjectPosition();
 				var objectRotation = GenerateRandomObjectRotation();
 
-				var spawnedEntity = Object.Instantiate(entityPrefab, objectPosition, objectRotation, objectParent);
+				var spawnedEntity = Object.Instantiate(entityPrefabs[prefabIndex], objectPosition, objectRotation, objectParent);
+				//using the prefab index as the id for now, until the object specification system exists
+				spawnedEntity.Initialize(prefabIndex);
 				_activeEntites.Add(spawnedEntity);
 			}
 		}
