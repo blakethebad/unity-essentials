@@ -4,9 +4,8 @@ using UnityEngine;
 namespace UnityEssentials.Utilities
 {
     /// <summary>
-    /// Statically dispatched publish/subscribe, isolated per <typeparamref name="TBus"/> discriminator
-    /// so unrelated systems never share a channel. Handlers live in a per-event copy-on-write array,
-    /// which keeps the warm publish path allocation free.
+    /// Statically dispatched publish/subscribe, one channel per event type. Handlers live in a
+    /// per-event copy-on-write array, which keeps the warm publish path allocation free.
     /// </summary>
     /// <remarks>
     /// Publish iterates a snapshot of that array: a handler unsubscribed while a publish is in flight
@@ -15,7 +14,7 @@ namespace UnityEssentials.Utilities
     /// each Unsubscribe removes one registration. A handler that throws is reported through
     /// <see cref="Debug.LogException(Exception)"/> and the handlers behind it still run.
     /// </remarks>
-    public static class EventBus<TBus> where TBus : struct, IEventBus
+    public static class EventBus
     {
         /// <summary>
         /// Registers <paramref name="handler"/> for <typeparamref name="TEvent"/>, behind every
@@ -69,6 +68,7 @@ namespace UnityEssentials.Utilities
             Channel<TEvent>.Handlers = updated;
         }
 
+		//TODO: Maybe rename to raise instead of publish?? 
         /// <summary>
         /// Invokes every handler subscribed to <typeparamref name="TEvent"/> in subscription order,
         /// on the snapshot of handlers taken when the call started.
@@ -94,7 +94,7 @@ namespace UnityEssentials.Utilities
             }
         }
 
-        /// <summary>Removes every handler subscribed to <typeparamref name="TEvent"/> on this bus.</summary>
+        /// <summary>Removes every handler subscribed to <typeparamref name="TEvent"/>.</summary>
         public static void Clear<TEvent>() where TEvent : struct, IEvent
         {
             StaticResetRegistry.AssertMainThread();
@@ -102,8 +102,8 @@ namespace UnityEssentials.Utilities
         }
 
         /// <summary>
-        /// Backing store for one (bus, event) pair. Each closed generic gets its own statics, which
-        /// is what makes the channels independent without a dictionary lookup on the hot path.
+        /// Backing store for one event type. Each closed generic gets its own statics, which is what
+        /// makes the channels independent without a dictionary lookup on the hot path.
         /// </summary>
         internal static class Channel<TEvent> where TEvent : struct, IEvent
         {

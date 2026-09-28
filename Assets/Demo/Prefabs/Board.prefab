@@ -48,14 +48,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BoardController
   inverseCollider: {fileID: 3489860647841049531}
+  _entityCollector: {fileID: 9202190101485780350}
   objectParent: {fileID: 5159403549561856067}
   contentObjectLayer:
     serializedVersion: 2
     m_Bits: 64
-  verticalOffset: -0.5
-  horizontalOffset: 1
+  bottomLeftOffset: {x: 0.5, y: 1}
+  topRightOffset: {x: 0.5, y: 0.5}
   perObjectSpawnRadius: 2
   followStrength: 20
+  markDuration: 1.5
+  pickupLiftHeight: 1.5
 --- !u!1 &4318369318031295622
 GameObject:
   m_ObjectHideFlags: 0
@@ -101,8 +104,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEssentials.Colliders::UnityEssentials.Colliders.InverseCollider
   shape: 0
-  center: {x: 0, y: 2, z: 0}
-  size: {x: 3.97, y: 4, z: 8.26}
+  center: {x: 0, y: 2, z: 0.25}
+  size: {x: 5.6778426, y: 4, z: 9.971249}
   radius: 0.5
   longitudeSegments: 24
   latitudeSegments: 16
@@ -152,8 +155,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8034588805095508148}
-  - component: {fileID: 9128920259864949140}
   - component: {fileID: 7506787152304624586}
+  - component: {fileID: 9202190101485780350}
   m_Layer: 0
   m_Name: Collector
   m_TagString: Untagged
@@ -170,24 +173,12 @@ Transform:
   m_GameObject: {fileID: 8297694251900276446}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -5.13}
+  m_LocalPosition: {x: 0, y: 0, z: -4.7356243}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 2901356878486927969}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &9128920259864949140
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8297694251900276446}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6db10e8a07f8e27ec73fa5ac7d12aa15, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EntityCollector
 --- !u!136 &7506787152304624586
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -207,7 +198,20 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 1.34
+  m_Radius: 1.93
   m_Height: 4
   m_Direction: 1
   m_Center: {x: 0, y: 2, z: 0}
+--- !u!114 &9202190101485780350
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8297694251900276446}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6db10e8a07f8e27ec73fa5ac7d12aa15, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EntityCollector
+  _collider: {fileID: 7506787152304624586}

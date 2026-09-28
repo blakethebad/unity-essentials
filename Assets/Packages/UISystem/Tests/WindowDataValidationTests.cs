@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -6,8 +6,9 @@ namespace UnityEssentials.UI.Tests
 {
     /// <summary>
     /// The two-tier validation of a <see cref="WindowData"/>: the dispatch-time
-    /// <c>ThrowIfInvalid</c> pass that rejects every malformed list shape naming the list and index,
-    /// and the inspector-time <c>OnValidate</c> pass that must never throw on the same shapes.
+    /// <c>ThrowIfInvalid</c> pass that rejects every malformed shape of the UI prefab list naming
+    /// the list and index, and the inspector-time <c>OnValidate</c> pass that must never throw on
+    /// the same shapes.
     /// </summary>
     [TestFixture]
     public class WindowDataValidationTests : UITestFixture
@@ -17,7 +18,7 @@ namespace UnityEssentials.UI.Tests
         [Test]
         public void ThrowIfInvalid_NullEntryInUIPrefabs_NamesTheListAndIndex()
         {
-            var data = BuildWindowData(new[] { BuildUIPrefab<TestScreenA>(), null });
+            var data = BuildWindowData(BuildUIPrefab<TestElementA>(), null);
 
             var error = Assert.Throws<WindowConfigurationException>(() => data.ThrowIfInvalid());
 
@@ -35,121 +36,32 @@ namespace UnityEssentials.UI.Tests
             StringAssert.Contains("UI Prefabs", error.Message);
             StringAssert.Contains("index 0", error.Message);
             StringAssert.Contains("NotAUIElement", error.Message);
+            StringAssert.Contains("UIBase", error.Message);
         }
 
         [Test]
         public void ThrowIfInvalid_DuplicateTypeInUIPrefabs_NamesBothIndices()
         {
             var data = BuildWindowData(
-                BuildUIPrefab<TestScreenA>(),
-                BuildUIPrefab<TestPopupA>(),
-                BuildUIPrefab<TestScreenA>());
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>(),
+                BuildUIPrefab<TestElementA>());
 
             var error = Assert.Throws<WindowConfigurationException>(() => data.ThrowIfInvalid());
 
-            StringAssert.Contains("TestScreenA", error.Message);
+            StringAssert.Contains("TestElementA", error.Message);
             StringAssert.Contains("indices 0 and 2", error.Message);
         }
 
-        [Test]
-        public void ThrowIfInvalid_WidgetPrefabInUIPrefabs_PointsAtTheWidgetsList()
-        {
-            var data = BuildWindowData(BuildWidgetPrefab<TestWidget>());
-
-            var error = Assert.Throws<WindowConfigurationException>(() => data.ThrowIfInvalid());
-
-            StringAssert.Contains("UI Prefabs", error.Message);
-            StringAssert.Contains("index 0", error.Message);
-            StringAssert.Contains("Widgets", error.Message);
-        }
-
-        // ---- Widget list -----------------------------------------------------------
-
-        [Test]
-        public void ThrowIfInvalid_NullEntryInWidgets_NamesTheListAndIndex()
-        {
-            var data = BuildWindowData(new GameObject[0], new WidgetData[] { null });
-
-            var error = Assert.Throws<WindowConfigurationException>(() => data.ThrowIfInvalid());
-
-            StringAssert.Contains("Widgets", error.Message);
-            StringAssert.Contains("index 0", error.Message);
-        }
-
-        [Test]
-        public void ThrowIfInvalid_WidgetEntryWithNoPrefab_NamesTheListAndIndex()
-        {
-            var data = BuildWindowData(new GameObject[0], BuildWidgets(new GameObject[] { null }));
-
-            var error = Assert.Throws<WindowConfigurationException>(() => data.ThrowIfInvalid());
-
-            StringAssert.Contains("Widgets", error.Message);
-            StringAssert.Contains("index 0", error.Message);
-        }
-
-        [Test]
-        public void ThrowIfInvalid_WidgetPrefabWithNoUIComponent_NamesTheListIndexAndPrefab()
-        {
-            var data = BuildWindowData(new GameObject[0], BuildWidgets(BuildEmptyPrefab("BareWidgetPrefab")));
-
-            var error = Assert.Throws<WindowConfigurationException>(() => data.ThrowIfInvalid());
-
-            StringAssert.Contains("Widgets", error.Message);
-            StringAssert.Contains("index 0", error.Message);
-            StringAssert.Contains("BareWidgetPrefab", error.Message);
-        }
-
-        [Test]
-        public void ThrowIfInvalid_ScreenPrefabInWidgets_PointsAtTheUIPrefabsList()
-        {
-            var data = BuildWindowData(new GameObject[0], BuildWidgets(BuildUIPrefab<TestScreenA>()));
-
-            var error = Assert.Throws<WindowConfigurationException>(() => data.ThrowIfInvalid());
-
-            StringAssert.Contains("Widgets", error.Message);
-            StringAssert.Contains("index 0", error.Message);
-            StringAssert.Contains("UI Prefabs", error.Message);
-        }
-
-        [Test]
-        public void ThrowIfInvalid_DuplicateTypeInWidgets_NamesBothIndices()
-        {
-            var data = BuildWindowData(
-                new GameObject[0],
-                BuildWidgets(
-                    BuildWidgetPrefab<TestWidget>(),
-                    BuildWidgetPrefab<TestWidgetB>(),
-                    BuildWidgetPrefab<TestWidget>()));
-
-            var error = Assert.Throws<WindowConfigurationException>(() => data.ThrowIfInvalid());
-
-            StringAssert.Contains("TestWidget", error.Message);
-            StringAssert.Contains("indices 0 and 2", error.Message);
-        }
-
-        // ---- Ordering and the well-formed case -----------------------------------------
-
-        [Test]
-        public void ThrowIfInvalid_WithFaultsInBothLists_ReportsTheUIPrefabsListFirst()
-        {
-            var data = BuildWindowData(new GameObject[] { null }, new WidgetData[] { null });
-
-            var error = Assert.Throws<WindowConfigurationException>(() => data.ThrowIfInvalid());
-
-            StringAssert.Contains("UI Prefabs", error.Message);
-        }
+        // ---- The well-formed case -------------------------------------------------
 
         [Test]
         public void ThrowIfInvalid_WithWellFormedLists_DoesNotThrow()
         {
             var data = BuildWindowData(
-                new[]
-                {
-                    BuildUIPrefab<TestScreenA>(),
-                    BuildUIPrefab<TestPopupA>(),
-                    BuildUIPrefab<TestPanelA>()
-                },
-                BuildWidgets(BuildWidgetPrefab<TestWidget>()));
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>(),
+                BuildUIPrefab<TestElementC>());
 
             Assert.DoesNotThrow(() => data.ThrowIfInvalid());
         }
@@ -160,20 +72,10 @@ namespace UnityEssentials.UI.Tests
         public void OnValidate_WithEveryMalformedListShape_DoesNotThrow()
         {
             var data = BuildWindowData(
-                new[]
-                {
-                    null,
-                    BuildEmptyPrefab("NoComponent"),
-                    BuildWidgetPrefab<TestWidget>(),
-                    BuildUIPrefab<TestScreenA>(),
-                    BuildUIPrefab<TestScreenA>()
-                },
-                new[]
-                {
-                    null,
-                    new WidgetData(null),
-                    new WidgetData(BuildUIPrefab<TestScreenB>())
-                });
+                null,
+                BuildEmptyPrefab("NoComponent"),
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementA>());
 
             Assert.DoesNotThrow(() => InvokeOnValidate(data));
         }

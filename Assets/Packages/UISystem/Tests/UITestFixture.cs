@@ -5,20 +5,20 @@ using UnityEngine;
 namespace UnityEssentials.UI.Tests
 {
     /// <summary>
-    /// The base every UI fixture derives from: tracks the objects and services a test creates,
-    /// tears them down deterministically, resets the package's static state, and carries the
-    /// builders that turn plain GameObjects into the "prefabs" a <see cref="WindowData"/> expects.
+    /// The base every UI fixture derives from: tracks the objects and services a test creates, tears
+    /// them down deterministically, resets the package's static state, and carries the builders that
+    /// turn plain GameObjects into the "prefabs" a <see cref="WindowData"/> expects.
     /// </summary>
     public abstract class UITestFixture
     {
         private readonly List<UnityEngine.Object> _trackedObjects = new List<UnityEngine.Object>();
-        private readonly List<WindowService> _trackedServices = new List<WindowService>();
+        private readonly List<UIService> _trackedServices = new List<UIService>();
 
-        protected static IReadOnlyList<MonoBehaviour> CallLog => UICallLog.Entries;
+        protected static IReadOnlyList<UIBase> CallLog => UICallLog.Entries;
 
-        protected static IReadOnlyList<MonoBehaviour> ShowLog => UICallLog.Shows;
+        protected static IReadOnlyList<UIBase> ShowLog => UICallLog.Shows;
 
-        protected static IReadOnlyList<MonoBehaviour> HideLog => UICallLog.Hides;
+        protected static IReadOnlyList<UIBase> HideLog => UICallLog.Hides;
 
         // Not named SetUp/TearDown: a derived fixture declaring its own would hide these and NUnit
         // would run only one of the two.
@@ -31,14 +31,15 @@ namespace UnityEssentials.UI.Tests
         [TearDown]
         public void UITestFixtureTearDown()
         {
-            // Windows are closed first so every element's OnHide runs against a live window —
-            // CloseWindow also destroys each service's window parent — then tracked objects are
-            // destroyed newest-first.
+            // Windows are closed first so every element's OnHide runs against a live window — closing
+            // also destroys each service's window parent — then tracked objects are destroyed
+            // newest-first. Dispose rather than CloseWindow so every test exercises the IDisposable
+            // implementation, which is specified to be an idempotent CloseWindow.
             try
             {
                 for (var i = _trackedServices.Count - 1; i >= 0; i--)
                 {
-                    _trackedServices[i].CloseWindow();
+                    _trackedServices[i].Dispose();
                 }
             }
             finally
@@ -73,7 +74,7 @@ namespace UnityEssentials.UI.Tests
         }
 
         /// <summary>Registers a service so its window is closed at the end of the test, and hands it back.</summary>
-        protected WindowService TrackService(WindowService service)
+        protected UIService TrackService(UIService service)
         {
             if (service != null)
             {
@@ -83,25 +84,21 @@ namespace UnityEssentials.UI.Tests
             return service;
         }
 
-        /// <summary>Creates a tracked <see cref="WindowService"/> with no window loaded.</summary>
-        protected WindowService CreateService()
+        /// <summary>Creates a tracked <see cref="UIService"/> with no window loaded.</summary>
+        protected UIService CreateService()
         {
-            return TrackService(new WindowService());
+            return TrackService(new UIService());
         }
 
-        /// <summary>Creates a service and immediately loads a window built from <paramref name="uiPrefabs"/>.</summary>
-        protected WindowService CreateLoadedService(params GameObject[] uiPrefabs)
+        /// <summary>
+        /// Creates a tracked service and immediately loads a window built from
+        /// <paramref name="uiPrefabs"/>. The route to a bound element: resolve one with
+        /// <see cref="UIService.GetUI{T}"/> and it is legal to show.
+        /// </summary>
+        protected UIService CreateLoadedService(params GameObject[] uiPrefabs)
         {
             var service = CreateService();
             service.SwitchWindow(BuildWindowData(uiPrefabs));
-            return service;
-        }
-
-        /// <summary>Creates a service and loads a window carrying both UI prefabs and widget prototypes.</summary>
-        protected WindowService CreateLoadedService(GameObject[] uiPrefabs, WidgetData[] widgets)
-        {
-            var service = CreateService();
-            service.SwitchWindow(BuildWindowData(uiPrefabs, widgets));
             return service;
         }
 
@@ -116,27 +113,20 @@ namespace UnityEssentials.UI.Tests
             return host;
         }
 
-        /// <summary>Builds a runtime prefab and hands back its component. Never bound to a window.</summary>
+        /// <summary>
+        /// Builds a runtime prefab and hands back its component. The element is <b>unbound</b> — no
+        /// window ever instantiated it — so calling <see cref="UIBase.Show(IUIData)"/> on it throws
+        /// <see cref="UIBindingException"/>.
+        /// </summary>
+        /// <remarks>
+        /// Use this to assert that throw, and to inspect an element's initial <see cref="UIBase.State"/>
+        /// before anything has happened to it. For an element you intend to show, go through
+        /// <see cref="CreateLoadedService(GameObject[])"/> and <see cref="UIService.GetUI{T}"/>
+        /// instead: only a window-instantiated instance is bound.
+        /// </remarks>
         protected T BuildUIElement<T>() where T : UIBase
         {
             return BuildUIPrefab<T>().GetComponent<T>();
-        }
-
-        /// <summary>
-        /// Builds a runtime stand-in for a widget prefab. Separate from <see cref="BuildUIPrefab{T}"/>
-        /// because widgets live in their own hierarchy rooted at <see cref="UIWidget"/>.
-        /// </summary>
-        protected GameObject BuildWidgetPrefab<T>() where T : UIWidget
-        {
-            var host = Track(new GameObject(typeof(T).Name));
-            host.AddComponent<T>();
-            return host;
-        }
-
-        /// <summary>Builds a widget prefab and hands back its component. Never bound to a window.</summary>
-        protected T BuildWidget<T>() where T : UIWidget
-        {
-            return BuildWidgetPrefab<T>().GetComponent<T>();
         }
 
         /// <summary>Builds a tracked, active GameObject carrying no UI component.</summary>
@@ -145,39 +135,19 @@ namespace UnityEssentials.UI.Tests
             return Track(new GameObject(objectName));
         }
 
-        /// <summary>Builds a tracked <see cref="WindowData"/> from UI prefabs alone.</summary>
+        /// <summary>Builds a tracked <see cref="WindowData"/> from UI prefabs alone. Not validated.</summary>
         protected WindowData BuildWindowData(params GameObject[] uiPrefabs)
         {
-            return BuildWindowData(uiPrefabs, null, null);
+            return BuildWindowData(uiPrefabs, null);
         }
 
-        /// <summary>Builds a tracked <see cref="WindowData"/> from UI prefabs and widget entries.</summary>
-        protected WindowData BuildWindowData(GameObject[] uiPrefabs, WidgetData[] widgets)
+        /// <summary>
+        /// Builds a tracked <see cref="WindowData"/> with explicit canvas settings. Nothing is
+        /// filtered or checked — malformed shapes must reach validation intact.
+        /// </summary>
+        protected WindowData BuildWindowData(GameObject[] uiPrefabs, CanvasSettings canvas)
         {
-            return BuildWindowData(uiPrefabs, widgets, null);
-        }
-
-        /// <summary>Builds a tracked <see cref="WindowData"/> with explicit canvas settings. Not validated.</summary>
-        protected WindowData BuildWindowData(GameObject[] uiPrefabs, WidgetData[] widgets, CanvasSettings canvas)
-        {
-            return Track(WindowData.Create(uiPrefabs, widgets, canvas));
-        }
-
-        /// <summary>Wraps each prefab in a <see cref="WidgetData"/>. Nothing is filtered — malformed shapes must reach validation intact.</summary>
-        protected static WidgetData[] BuildWidgets(params GameObject[] widgetPrefabs)
-        {
-            if (widgetPrefabs == null)
-            {
-                return new WidgetData[0];
-            }
-
-            var entries = new WidgetData[widgetPrefabs.Length];
-            for (var i = 0; i < widgetPrefabs.Length; i++)
-            {
-                entries[i] = new WidgetData(widgetPrefabs[i]);
-            }
-
-            return entries;
+            return Track(WindowData.Create(uiPrefabs, canvas));
         }
 
         /// <summary>

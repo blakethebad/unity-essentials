@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace UnityEssentials.UI.Tests
 {
     /// <summary>
     /// A recognisable payload: a label and a number, so assertions can prove the package routed the
-    /// exact instance rather than an equal-looking one.
+    /// exact <see cref="IUIData"/> instance through to <c>OnShow</c> rather than an equal-looking one.
     /// </summary>
     public sealed class TestUIData : IUIData
     {
@@ -32,16 +31,15 @@ namespace UnityEssentials.UI.Tests
 
     /// <summary>
     /// The ordered sink every recording double writes to, so fixtures can assert the exact
-    /// OnShow/OnHide sequence an operation produced. Static because the doubles are instantiated by
-    /// the window under test; the fixture clears it in SetUp and TearDown.
+    /// OnShow/OnHide sequence an operation produced — window load and unload order above all.
+    /// Static because the doubles are instantiated by the window under test, not by the test;
+    /// <see cref="UITestFixture"/> clears it in both SetUp and TearDown.
     /// </summary>
     public static class UICallLog
     {
-        // MonoBehaviour rather than UIBase: widgets live in their own hierarchy rooted at UIWidget,
-        // and the log records both.
-        public static readonly List<MonoBehaviour> Entries = new List<MonoBehaviour>();
-        public static readonly List<MonoBehaviour> Shows = new List<MonoBehaviour>();
-        public static readonly List<MonoBehaviour> Hides = new List<MonoBehaviour>();
+        public static readonly List<UIBase> Entries = new List<UIBase>();
+        public static readonly List<UIBase> Shows = new List<UIBase>();
+        public static readonly List<UIBase> Hides = new List<UIBase>();
         public static readonly List<string> Markers = new List<string>();
 
         public static void Clear()
@@ -52,7 +50,7 @@ namespace UnityEssentials.UI.Tests
             Markers.Clear();
         }
 
-        public static void RecordShow(MonoBehaviour element)
+        public static void RecordShow(UIBase element)
         {
             if (element == null)
             {
@@ -64,7 +62,7 @@ namespace UnityEssentials.UI.Tests
             Markers.Add($"Show:{element.GetType().Name}");
         }
 
-        public static void RecordHide(MonoBehaviour element)
+        public static void RecordHide(UIBase element)
         {
             if (element == null)
             {
@@ -83,9 +81,9 @@ namespace UnityEssentials.UI.Tests
     }
 
     /// <summary>
-    /// What every recording double exposes regardless of which element base it derives from: hook
-    /// counts and the last payload. The counting bodies repeat once per base — the four bases are
-    /// separate roots, so there is nothing to inherit them from.
+    /// What every recording double exposes: hook counts and the last payload received. Assertions
+    /// written against this interface keep working when kind-specific element bases return and the
+    /// doubles are split across several roots again.
     /// </summary>
     public interface ICountingUI
     {
@@ -98,8 +96,11 @@ namespace UnityEssentials.UI.Tests
         void ResetCounts();
     }
 
-    /// <summary>Base for every screen double: counts its hooks and writes them to <see cref="UICallLog"/>.</summary>
-    public abstract class RecordingScreenBase : ScreenBase, ICountingUI
+    /// <summary>
+    /// The single recording double base: counts <c>OnShow</c>/<c>OnHide</c>, remembers the payload,
+    /// and appends every hook to <see cref="UICallLog"/> so cross-element ordering is observable.
+    /// </summary>
+    public abstract class RecordingUIBase : UIBase, ICountingUI
     {
         public int ShowCount { get; private set; }
 
@@ -128,283 +129,59 @@ namespace UnityEssentials.UI.Tests
         }
     }
 
-    public sealed class TestScreenA : RecordingScreenBase
+    /// <summary>Interchangeable element type, for tests that need several distinct types in one window.</summary>
+    public sealed class TestElementA : RecordingUIBase
     {
     }
 
-    public sealed class TestScreenB : RecordingScreenBase
+    /// <summary>Interchangeable element type, for tests that need several distinct types in one window.</summary>
+    public sealed class TestElementB : RecordingUIBase
     {
     }
 
-    public sealed class TestScreenC : RecordingScreenBase
+    /// <summary>Interchangeable element type, for tests that need several distinct types in one window.</summary>
+    public sealed class TestElementC : RecordingUIBase
     {
     }
 
-    public sealed class CountingScreen : RecordingScreenBase
+    /// <summary>Interchangeable element type, for tests that need several distinct types in one window.</summary>
+    public sealed class TestElementD : RecordingUIBase
     {
     }
 
-    /// <summary>A screen type deliberately never listed in any WindowData the suite builds.</summary>
-    public sealed class UnregisteredScreen : RecordingScreenBase
+    /// <summary>Interchangeable element type, for tests that need several distinct types in one window.</summary>
+    public sealed class TestElementE : RecordingUIBase
     {
     }
 
     /// <summary>
-    /// A screen whose transitions never complete on their own: each captures its callback instead
-    /// of invoking it, so a test can hold the element in Showing/Hiding and finish by hand.
+    /// The element to reach for when a test is about hook counts rather than about which type was
+    /// resolved — named for what it is being used for at the call site.
     /// </summary>
-    public sealed class DeferredTransitionScreen : RecordingScreenBase
-    {
-        public bool DeferShow = true;
-        public bool DeferHide = true;
-        public Action PendingShowComplete;
-        public Action PendingHideComplete;
-
-        public bool InvokePendingShow()
-        {
-            if (PendingShowComplete == null)
-            {
-                return false;
-            }
-
-            PendingShowComplete();
-            return true;
-        }
-
-        public bool InvokePendingHide()
-        {
-            if (PendingHideComplete == null)
-            {
-                return false;
-            }
-
-            PendingHideComplete();
-            return true;
-        }
-
-        public void ClearPending()
-        {
-            PendingShowComplete = null;
-            PendingHideComplete = null;
-        }
-
-        protected override void OnShowTransition(Action complete)
-        {
-            PendingShowComplete = complete;
-
-            if (!DeferShow)
-            {
-                complete();
-            }
-        }
-
-        protected override void OnHideTransition(Action complete)
-        {
-            PendingHideComplete = complete;
-
-            if (!DeferHide)
-            {
-                complete();
-            }
-        }
-    }
-
-    /// <summary>The well-formed auto-panel case: declares TestPanelA then TestPanelB and hands each a recognisable payload.</summary>
-    public sealed class AutoPanelScreen : RecordingScreenBase
-    {
-        public const string AutoPanelDataPrefix = "auto:";
-
-        private static readonly Type[] Panels = { typeof(TestPanelA), typeof(TestPanelB) };
-
-        public static string ExpectedDataLabel(Type panelType)
-        {
-            return AutoPanelDataPrefix + panelType.Name;
-        }
-
-        protected override Type[] AutoPanels => Panels;
-
-        protected override IUIData GetAutoPanelData(Type panelType)
-        {
-            return new TestUIData(ExpectedDataLabel(panelType));
-        }
-    }
-
-    /// <summary>Declares a popup type among its auto-panels — an illegal declaration no window can satisfy.</summary>
-    public sealed class BadAutoPanelScreen : RecordingScreenBase
-    {
-        private static readonly Type[] Panels = { typeof(TestPopupA) };
-
-        protected override Type[] AutoPanels => Panels;
-    }
-
-    /// <summary>Declares a valid panel type that no fixture ever lists in a WindowData.</summary>
-    public sealed class MissingAutoPanelScreen : RecordingScreenBase
-    {
-        private static readonly Type[] Panels = { typeof(UnregisteredPanel) };
-
-        protected override Type[] AutoPanels => Panels;
-    }
-
-    /// <summary>Declares an array containing a null entry — the shape a stale element leaves behind.</summary>
-    public sealed class NullAutoPanelEntryScreen : RecordingScreenBase
-    {
-        private static readonly Type[] Panels = { null };
-
-        protected override Type[] AutoPanels => Panels;
-    }
-
-    /// <summary>Returns null from AutoPanels, which the package must treat as "no panels".</summary>
-    public sealed class NullAutoPanelArrayScreen : RecordingScreenBase
-    {
-        protected override Type[] AutoPanels => null;
-    }
-
-    /// <summary>Base for every popup double: counts its hooks and writes them to <see cref="UICallLog"/>.</summary>
-    public abstract class RecordingPopupBase : PopupBase, ICountingUI
-    {
-        public int ShowCount { get; private set; }
-
-        public int HideCount { get; private set; }
-
-        public IUIData LastData { get; private set; }
-
-        public void ResetCounts()
-        {
-            ShowCount = 0;
-            HideCount = 0;
-            LastData = null;
-        }
-
-        protected override void OnShow(IUIData uiData)
-        {
-            ShowCount++;
-            LastData = uiData;
-            UICallLog.RecordShow(this);
-        }
-
-        protected override void OnHide()
-        {
-            HideCount++;
-            UICallLog.RecordHide(this);
-        }
-    }
-
-    public sealed class TestPopupA : RecordingPopupBase
-    {
-    }
-
-    public sealed class TestPopupB : RecordingPopupBase
-    {
-    }
-
-    public sealed class CountingPopup : RecordingPopupBase
-    {
-    }
-
-    /// <summary>A popup type deliberately never listed in any WindowData.</summary>
-    public sealed class UnregisteredPopup : RecordingPopupBase
-    {
-    }
-
-    /// <summary>Base for every panel double: counts its hooks and writes them to <see cref="UICallLog"/>.</summary>
-    public abstract class RecordingPanelBase : PanelBase, ICountingUI
-    {
-        public int ShowCount { get; private set; }
-
-        public int HideCount { get; private set; }
-
-        public IUIData LastData { get; private set; }
-
-        public void ResetCounts()
-        {
-            ShowCount = 0;
-            HideCount = 0;
-            LastData = null;
-        }
-
-        protected override void OnShow(IUIData uiData)
-        {
-            ShowCount++;
-            LastData = uiData;
-            UICallLog.RecordShow(this);
-        }
-
-        protected override void OnHide()
-        {
-            HideCount++;
-            UICallLog.RecordHide(this);
-        }
-    }
-
-    public sealed class TestPanelA : RecordingPanelBase
-    {
-    }
-
-    public sealed class TestPanelB : RecordingPanelBase
-    {
-    }
-
-    public sealed class CountingPanel : RecordingPanelBase
-    {
-    }
-
-    /// <summary>A panel type deliberately never listed in any WindowData.</summary>
-    public sealed class UnregisteredPanel : RecordingPanelBase
-    {
-    }
-
-    /// <summary>Base for every widget double: counts its hooks and writes them to <see cref="UICallLog"/>.</summary>
-    public abstract class RecordingWidgetBase : WidgetBase, ICountingUI
-    {
-        public int ShowCount { get; private set; }
-
-        public int HideCount { get; private set; }
-
-        public IUIData LastData { get; private set; }
-
-        public void ResetCounts()
-        {
-            ShowCount = 0;
-            HideCount = 0;
-            LastData = null;
-        }
-
-        protected override void OnShow(IUIData uiData)
-        {
-            ShowCount++;
-            LastData = uiData;
-            UICallLog.RecordShow(this);
-        }
-
-        protected override void OnHide()
-        {
-            HideCount++;
-            UICallLog.RecordHide(this);
-        }
-    }
-
-    public sealed class TestWidget : RecordingWidgetBase
-    {
-    }
-
-    public sealed class TestWidgetB : RecordingWidgetBase
-    {
-    }
-
-    public sealed class CountingWidget : RecordingWidgetBase
-    {
-    }
-
-    /// <summary>A widget type deliberately never listed in any WindowData.Widgets.</summary>
-    public sealed class UnregisteredWidget : RecordingWidgetBase
+    public sealed class CountingElement : RecordingUIBase
     {
     }
 
     /// <summary>
-    /// The unbound counterpart of <see cref="DeferredTransitionScreen"/>: the same captured-callback
-    /// behaviour on an element that needs no window at all, for driving the state machine in isolation.
+    /// An element type deliberately never listed in any <see cref="WindowData"/> the suite builds,
+    /// so resolving it proves <see cref="UIElementNotFoundException"/> and <c>TryGetUI</c>'s false.
     /// </summary>
-    public sealed class DeferredTransitionWidget : RecordingWidgetBase
+    public sealed class UnregisteredElement : RecordingUIBase
+    {
+    }
+
+    /// <summary>
+    /// An element whose transitions never complete on their own: each captures its completion
+    /// callback instead of invoking it, so a test can park the element in <c>Showing</c> or
+    /// <c>Hiding</c>, assert on that state, and finish the transition by hand.
+    /// </summary>
+    /// <remarks>
+    /// Invoking a captured callback is also how the stale-token guard in <see cref="UIBase"/> is
+    /// tested: hold one completion, start a second transition, then fire the held one and assert it
+    /// did nothing. <see cref="ClearPending"/> exists so a test can tell "never captured" apart from
+    /// "captured during an earlier step".
+    /// </remarks>
+    public sealed class DeferredTransitionElement : RecordingUIBase
     {
         public bool DeferShow = true;
         public bool DeferHide = true;

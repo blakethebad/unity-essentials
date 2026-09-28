@@ -60,7 +60,7 @@ namespace UnityEssentials.Utilities.Tests
         [TearDown]
         public void TearDown()
         {
-            EventBus<TestBusA>.Clear<DamageEvent>();
+            EventBus.Clear<DamageEvent>();
             StaticResetRegistry.ResetStatics();
         }
 
@@ -82,34 +82,34 @@ namespace UnityEssentials.Utilities.Tests
         [Test]
         public void WarmPublish_ToASubscribedHandler_DoesNotAllocate()
         {
-            EventBus<TestBusA>.Subscribe<DamageEvent>(OnDamage);
+            EventBus.Subscribe<DamageEvent>(OnDamage);
 
             // Warm-up: the channel's type initializer, its registry registration and the JIT of the
             // whole publish path all happen on this first call.
-            EventBus<TestBusA>.Publish(_damage);
+            EventBus.Publish(_damage);
             Assert.AreEqual(_damage.Amount, _handlerCalls);
 
-            Assert.That(() => { EventBus<TestBusA>.Publish(_damage); }, Is.Not.AllocatingGCMemory());
+            Assert.That(() => { EventBus.Publish(_damage); }, Is.Not.AllocatingGCMemory());
         }
 
         [Test]
         public void WarmPublish_ToSeveralHandlers_DoesNotAllocate()
         {
-            EventBus<TestBusA>.Subscribe<DamageEvent>(OnDamage);
-            EventBus<TestBusA>.Subscribe<DamageEvent>(OnDamageAlso);
+            EventBus.Subscribe<DamageEvent>(OnDamage);
+            EventBus.Subscribe<DamageEvent>(OnDamageAlso);
 
-            EventBus<TestBusA>.Publish(_damage);
+            EventBus.Publish(_damage);
             Assert.AreEqual(_damage.Amount * 2, _handlerCalls);
 
-            Assert.That(() => { EventBus<TestBusA>.Publish(_damage); }, Is.Not.AllocatingGCMemory());
+            Assert.That(() => { EventBus.Publish(_damage); }, Is.Not.AllocatingGCMemory());
         }
 
         [Test]
         public void WarmPublish_WithNoSubscribers_DoesNotAllocate()
         {
-            EventBus<TestBusA>.Publish(_damage);
+            EventBus.Publish(_damage);
 
-            Assert.That(() => { EventBus<TestBusA>.Publish(_damage); }, Is.Not.AllocatingGCMemory());
+            Assert.That(() => { EventBus.Publish(_damage); }, Is.Not.AllocatingGCMemory());
         }
 
         [Test]

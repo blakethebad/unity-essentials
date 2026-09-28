@@ -12,14 +12,4 @@ namespace UnityEssentials.Utilities.Tests
     {
         public int Points;
     }
-
-    /// <summary>Bus discriminator; pairs with <see cref="TestBusB"/> to prove bus isolation.</summary>
-    public struct TestBusA : IEventBus
-    {
-    }
-
-    /// <summary>Bus discriminator; pairs with <see cref="TestBusA"/> to prove bus isolation.</summary>
-    public struct TestBusB : IEventBus
-    {
-    }
 }

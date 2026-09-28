@@ -1,3 +1,10 @@
+> **Superseded.** The package was trimmed to a single `UIBase` element kind and a `UIService`;
+> `ScreenBase`/`PopupBase`/`PanelBase`, the widget hierarchy and the navigation history described
+> below were all removed. This document is kept **unedited** as the design record and as the
+> blueprint for expanding back to the full system — see `Docs/UISystem-Trim-Plan.md` for what
+> actually ships today. Note it already described several files that never shipped (`UIRoot.cs`,
+> `UIElementKind.cs`, `UIObjects.cs`, and the four per-kind containers).
+
 # UI System (UGUI) — Implementation Plan
 
 A reusable UGUI window/screen/popup/panel/widget package for `Assets/Packages/UISystem/`, following this repo's library conventions (see `ServiceLocator`, `StateManager` and `Docs/HapticSystem-Plan.md`).

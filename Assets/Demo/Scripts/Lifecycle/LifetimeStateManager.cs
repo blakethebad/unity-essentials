@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using UnityEssentials.Services;
 using UnityEssentials.States;
+using UnityEssentials.UI;
 
 public enum LifetimeState
 {
@@ -10,7 +12,8 @@ public enum LifetimeState
 
 public class LifetimeStateManager : StateManagerBehaviour<LifetimeState>
 {
-	public BoardController board;
+	public Board board;
+	public WindowData mainWindowData;
 	public List<BoardEntity> tempObjectPool;
 
     protected override void OnInitialize()
@@ -18,7 +21,10 @@ public class LifetimeStateManager : StateManagerBehaviour<LifetimeState>
 		AddState(new InitializeState());
 		AddState(new MainMenuState());
 		AddState(new GameplayState());
-    }
+
+		//TODO: Maybe move it somewhere else
+		ServiceLocator.Register<UIService>(new UIService());
+	}
 
     protected override void InsertTransitions(in Transitions<LifetimeState> transitions)
     {

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEssentials.Utilities;
 
 [RequireComponent(typeof(Rigidbody))]
 public class BoardEntity : MonoBehaviour
@@ -18,9 +19,30 @@ public class BoardEntity : MonoBehaviour
 	{
 		Rigidbody = GetComponent<Rigidbody>();
 		_collider = GetComponentInChildren<Collider>();
-		var bounds = _collider.bounds;
-		Radius = Mathf.Max(bounds.extents.x, bounds.extents.y, bounds.extents.z);
+		Radius = ComputeBoundingRadius();
 		Material = _collider.sharedMaterial;
+	}
+
+	//Callable on prefab assets too: only the authored shape is read, never physics state
+	public float ComputeBoundingRadius()
+	{
+		var collider = _collider != null ? _collider : GetComponentInChildren<Collider>();
+		var scale = collider.transform.lossyScale;
+		var maxScale = Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+
+		switch(collider)
+		{
+			case SphereCollider sphere:
+				return (sphere.center.magnitude + sphere.radius) * maxScale;
+			case CapsuleCollider capsule:
+				return (capsule.center.magnitude + Mathf.Max(capsule.height * 0.5f, capsule.radius)) * maxScale;
+			case BoxCollider box:
+				return (box.center.magnitude + box.size.magnitude * 0.5f) * maxScale;
+			case MeshCollider mesh:
+				return (mesh.sharedMesh.bounds.center.magnitude + mesh.sharedMesh.bounds.extents.magnitude) * maxScale;
+			default:
+				return collider.bounds.extents.magnitude;
+		}
 	}
 
 	public void Initialize(int id)
@@ -28,15 +50,24 @@ public class BoardEntity : MonoBehaviour
 		Id = id;
 	}
 
+	//Rotation is frozen while held so collisions on the way up cannot spin the object
 	public void OnObjectSelectedWithInput()
 	{
 		_isHeld = true;
+		Rigidbody.angularVelocity = Vector3.zero;
+		Rigidbody.freezeRotation = true;
+
+		EventBus.Publish<EntityGrabbedEvent>(new EntityGrabbedEvent()
+		{
+			EntityName = gameObject.name
+		});
 	}
 
 	public void OnObjectReleasedWithInput(float markDuration)
 	{
 		_isHeld = false;
 		_markedUntil = Time.time + markDuration;
+		Rigidbody.freezeRotation = false;
 	}
 
 	public void Store()

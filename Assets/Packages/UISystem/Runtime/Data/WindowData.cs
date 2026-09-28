@@ -6,31 +6,23 @@ using UnityEngine.UI;
 namespace UnityEssentials.UI
 {
     /// <summary>
-    /// The asset that defines one window: which screen, popup and panel prefabs it owns, which
-    /// widget prefabs it can spawn, and how its canvas is configured. Create one through
-    /// <c>Assets &gt; Create &gt; UnityEssentials &gt; UI &gt; Window Data</c> and hand it to
-    /// <c>WindowService.SwitchWindow</c>.
+    /// The asset that defines one window: the <see cref="UIBase"/> prefabs it owns and how its canvas
+    /// is configured. Create one through <c>Assets &gt; Create &gt; UnityEssentials &gt; UI &gt; Window
+    /// Data</c> and hand it to <see cref="UIService.SwitchWindow"/>.
     /// </summary>
     [CreateAssetMenu(menuName = "UnityEssentials/UI/Window Data", fileName = "WindowData")]
     public sealed class WindowData : ScriptableObject
     {
         private static readonly GameObject[] NoPrefabs = new GameObject[0];
-        private static readonly WidgetData[] NoWidgets = new WidgetData[0];
 
-        [Tooltip("Screen, popup and panel prefabs owned by this window. Each is instantiated once when " +
-                 "the window loads and resolved by its concrete type. Widgets do not belong here.")]
+        [Tooltip("The UIBase prefabs owned by this window. Each is instantiated once when the window " +
+                 "loads and resolved by its concrete type, so the list holds at most one prefab per type.")]
         [SerializeField] private GameObject[] uiPrefabs = new GameObject[0];
-
-        [Tooltip("Widget prefabs this window can spawn. Stored as prototypes and instantiated on demand " +
-                 "by GetWidget<T>(), never at load time.")]
-        [SerializeField] private WidgetData[] widgets = new WidgetData[0];
 
         [Tooltip("How this window's Canvas, CanvasScaler and GraphicRaycaster are configured.")]
         [SerializeField] private CanvasSettings canvas = new CanvasSettings();
 
         public IReadOnlyList<GameObject> UIPrefabs => uiPrefabs ?? NoPrefabs;
-
-        public IReadOnlyList<WidgetData> Widgets => widgets ?? NoWidgets;
 
         public CanvasSettings Canvas => EnsureCanvas();
 
@@ -38,11 +30,10 @@ namespace UnityEssentials.UI
         /// Builds a <see cref="WindowData"/> in memory, for windows assembled at runtime rather than
         /// authored as an asset. Does not validate — validation is dispatch-time, by design.
         /// </summary>
-        public static WindowData Create(GameObject[] uiPrefabs, WidgetData[] widgets, CanvasSettings canvas)
+        public static WindowData Create(GameObject[] uiPrefabs, CanvasSettings canvas)
         {
             var data = CreateInstance<WindowData>();
             data.uiPrefabs = Copy(uiPrefabs, NoPrefabs);
-            data.widgets = Copy(widgets, NoWidgets);
             data.canvas = canvas ?? new CanvasSettings();
             return data;
         }
@@ -81,7 +72,7 @@ namespace UnityEssentials.UI
         {
             // Runs from SwitchWindow before anything is built or unloaded, so a malformed asset
             // leaves the live UI untouched.
-            WindowDataValidator.ThrowIfInvalid(name, UIPrefabs, Widgets);
+            WindowDataValidator.ThrowIfInvalid(name, UIPrefabs);
         }
 
         private void OnValidate()

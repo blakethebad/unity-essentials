@@ -1,4 +1,4 @@
-﻿using NUnit.Framework;
+using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -7,7 +7,7 @@ namespace UnityEssentials.UI.Tests
     /// <summary>
     /// What <c>SwitchWindow</c> builds: the service's window parent, the window GameObject with its
     /// canvas trio, and one bound, deactivated instance of every UI prefab parented directly under
-    /// the window — with the widget prototypes deliberately left uninstantiated.
+    /// the window — a flat hierarchy with nothing else created alongside it.
     /// </summary>
     [TestFixture]
     public class WindowLoadTests : UITestFixture
@@ -19,15 +19,15 @@ namespace UnityEssentials.UI.Tests
         {
             CreateService();
 
-            Assert.IsNull(GameObject.Find(WindowService.WindowParentName));
+            Assert.IsNull(GameObject.Find(UIService.WindowParentName));
         }
 
         [Test]
         public void SwitchWindow_CreatesTheWindowParent()
         {
-            CreateLoadedService(BuildUIPrefab<TestScreenA>());
+            CreateLoadedService(BuildUIPrefab<TestElementA>());
 
-            Assert.IsNotNull(GameObject.Find(WindowService.WindowParentName));
+            Assert.IsNotNull(GameObject.Find(UIService.WindowParentName));
         }
 
         [Test]
@@ -44,8 +44,8 @@ namespace UnityEssentials.UI.Tests
         [Test]
         public void SwitchWindow_OnTwoServices_ParentsEachWindowUnderItsOwnParent()
         {
-            var first = CreateLoadedService(BuildUIPrefab<TestScreenA>());
-            var second = CreateLoadedService(BuildUIPrefab<TestScreenB>());
+            var first = CreateLoadedService(BuildUIPrefab<TestElementA>());
+            var second = CreateLoadedService(BuildUIPrefab<TestElementB>());
 
             // Not AreNotEqual: NUnit walks a Transform as a collection of children, and two
             // structurally identical hierarchies compare equal — identity is what matters here.
@@ -59,7 +59,7 @@ namespace UnityEssentials.UI.Tests
 
             Assert.IsFalse(Application.isPlaying, "this suite is EditMode by design; see UIWindow.SafeDestroy.");
             Assert.IsNotNull(parent);
-            Assert.AreEqual(WindowService.WindowParentName, parent.gameObject.name);
+            Assert.AreEqual(UIService.WindowParentName, parent.gameObject.name);
         }
 
         [Test]
@@ -73,7 +73,7 @@ namespace UnityEssentials.UI.Tests
         [Test]
         public void CloseWindow_DestroysTheWindowParent()
         {
-            var service = CreateLoadedService(BuildUIPrefab<TestScreenA>());
+            var service = CreateLoadedService(BuildUIPrefab<TestElementA>());
             var host = service.WindowParent.gameObject;
 
             service.CloseWindow();
@@ -84,11 +84,11 @@ namespace UnityEssentials.UI.Tests
         [Test]
         public void SwitchWindow_AfterCloseWindow_CreatesANewParent()
         {
-            var service = CreateLoadedService(BuildUIPrefab<TestScreenA>());
+            var service = CreateLoadedService(BuildUIPrefab<TestElementA>());
             var first = service.WindowParent;
             service.CloseWindow();
 
-            service.SwitchWindow(BuildWindowData(BuildUIPrefab<TestScreenB>()));
+            service.SwitchWindow(BuildWindowData(BuildUIPrefab<TestElementB>()));
 
             Assert.IsNotNull(service.WindowParent);
             Assert.AreNotSame(first, service.WindowParent);
@@ -97,7 +97,7 @@ namespace UnityEssentials.UI.Tests
         [Test]
         public void SwitchWindow_ParentsTheWindowUnderTheWindowParent()
         {
-            var service = CreateLoadedService(BuildUIPrefab<TestScreenA>());
+            var service = CreateLoadedService(BuildUIPrefab<TestElementA>());
 
             Assert.AreSame(service.WindowParent, service.ActiveWindow.transform.parent);
         }
@@ -107,7 +107,7 @@ namespace UnityEssentials.UI.Tests
         [Test]
         public void SwitchWindow_BuildsTheCanvasTrioOnTheWindow()
         {
-            var window = CreateLoadedService(BuildUIPrefab<TestScreenA>()).ActiveWindow;
+            var window = CreateLoadedService(BuildUIPrefab<TestElementA>()).ActiveWindow;
 
             Assert.IsNotNull(window.GetComponent<Canvas>());
             Assert.IsNotNull(window.GetComponent<CanvasScaler>());
@@ -120,8 +120,7 @@ namespace UnityEssentials.UI.Tests
         {
             var service = CreateService();
             var data = BuildWindowData(
-                new[] { BuildUIPrefab<TestScreenA>() },
-                null,
+                new[] { BuildUIPrefab<TestElementA>() },
                 BuildCanvasSettings("{\"sortingOrder\":9,\"referenceResolution\":{\"x\":800.0,\"y\":600.0}}"));
 
             var window = service.SwitchWindow(data);
@@ -133,7 +132,7 @@ namespace UnityEssentials.UI.Tests
         [Test]
         public void SwitchWindow_AlwaysBuildsAScreenSpaceOverlayCanvas()
         {
-            var window = CreateLoadedService(BuildUIPrefab<TestScreenA>()).ActiveWindow;
+            var window = CreateLoadedService(BuildUIPrefab<TestElementA>()).ActiveWindow;
 
             Assert.AreEqual(RenderMode.ScreenSpaceOverlay, window.Canvas.renderMode);
             Assert.IsTrue(window.Canvas.worldCamera == null);
@@ -145,27 +144,28 @@ namespace UnityEssentials.UI.Tests
         public void SwitchWindow_InstantiatesOneElementPerPrefabInOrder()
         {
             var window = CreateLoadedService(
-                BuildUIPrefab<TestScreenA>(),
-                BuildUIPrefab<TestPopupA>(),
-                BuildUIPrefab<TestPanelA>()).ActiveWindow;
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>(),
+                BuildUIPrefab<TestElementC>()).ActiveWindow;
 
             Assert.AreEqual(3, window.Elements.Count);
-            Assert.IsInstanceOf<TestScreenA>(window.Elements[0]);
-            Assert.IsInstanceOf<TestPopupA>(window.Elements[1]);
-            Assert.IsInstanceOf<TestPanelA>(window.Elements[2]);
+            Assert.IsInstanceOf<TestElementA>(window.Elements[0]);
+            Assert.IsInstanceOf<TestElementB>(window.Elements[1]);
+            Assert.IsInstanceOf<TestElementC>(window.Elements[2]);
         }
 
         [Test]
         public void SwitchWindow_ParentsEveryElementDirectlyUnderTheWindow()
         {
             var window = CreateLoadedService(
-                BuildUIPrefab<TestScreenA>(),
-                BuildUIPrefab<TestPopupA>(),
-                BuildUIPrefab<TestPanelA>()).ActiveWindow;
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>(),
+                BuildUIPrefab<TestElementC>()).ActiveWindow;
 
-            Assert.AreEqual(window.transform, window.GetUI<TestScreenA>().transform.parent);
-            Assert.AreEqual(window.transform, window.GetUI<TestPopupA>().transform.parent);
-            Assert.AreEqual(window.transform, window.GetUI<TestPanelA>().transform.parent);
+            // AreSame, not AreEqual: NUnit deep-compares a Transform as a collection of children.
+            Assert.AreSame(window.transform, window.GetUI<TestElementA>().transform.parent);
+            Assert.AreSame(window.transform, window.GetUI<TestElementB>().transform.parent);
+            Assert.AreSame(window.transform, window.GetUI<TestElementC>().transform.parent);
         }
 
         // Sibling order is authored order: no containers, no re-sorting at load.
@@ -173,31 +173,31 @@ namespace UnityEssentials.UI.Tests
         public void SwitchWindow_OrdersElementsByTheirAuthoredOrder()
         {
             var window = CreateLoadedService(
-                BuildUIPrefab<TestScreenA>(),
-                BuildUIPrefab<TestPopupA>(),
-                BuildUIPrefab<TestPanelA>()).ActiveWindow;
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>(),
+                BuildUIPrefab<TestElementC>()).ActiveWindow;
 
-            Assert.AreEqual(0, window.GetUI<TestScreenA>().transform.GetSiblingIndex());
-            Assert.AreEqual(1, window.GetUI<TestPopupA>().transform.GetSiblingIndex());
-            Assert.AreEqual(2, window.GetUI<TestPanelA>().transform.GetSiblingIndex());
+            Assert.AreEqual(0, window.GetUI<TestElementA>().transform.GetSiblingIndex());
+            Assert.AreEqual(1, window.GetUI<TestElementB>().transform.GetSiblingIndex());
+            Assert.AreEqual(2, window.GetUI<TestElementC>().transform.GetSiblingIndex());
         }
 
         [Test]
         public void SwitchWindow_InstantiatesClonesRatherThanTheSourcePrefabs()
         {
-            var prefab = BuildUIPrefab<TestScreenA>();
+            var prefab = BuildUIPrefab<TestElementA>();
             var window = CreateLoadedService(prefab).ActiveWindow;
 
-            Assert.AreNotSame(prefab.GetComponent<TestScreenA>(), window.GetUI<TestScreenA>());
+            Assert.AreNotSame(prefab.GetComponent<TestElementA>(), window.GetUI<TestElementA>());
         }
 
         [Test]
         public void SwitchWindow_LeavesEveryElementDeactivated()
         {
             var window = CreateLoadedService(
-                BuildUIPrefab<TestScreenA>(),
-                BuildUIPrefab<TestPopupA>(),
-                BuildUIPrefab<TestPanelA>()).ActiveWindow;
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>(),
+                BuildUIPrefab<TestElementC>()).ActiveWindow;
 
             for (var i = 0; i < window.Elements.Count; i++)
             {
@@ -211,9 +211,9 @@ namespace UnityEssentials.UI.Tests
         public void SwitchWindow_LeavesEveryElementHidden()
         {
             var window = CreateLoadedService(
-                BuildUIPrefab<TestScreenA>(),
-                BuildUIPrefab<TestPopupA>(),
-                BuildUIPrefab<TestPanelA>()).ActiveWindow;
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>(),
+                BuildUIPrefab<TestElementC>()).ActiveWindow;
 
             for (var i = 0; i < window.Elements.Count; i++)
             {
@@ -227,14 +227,19 @@ namespace UnityEssentials.UI.Tests
         [Test]
         public void SwitchWindow_ShowsNothing()
         {
-            var service = CreateLoadedService(
-                BuildUIPrefab<TestScreenA>(),
-                BuildUIPrefab<TestPopupA>(),
-                BuildUIPrefab<TestPanelA>());
+            var window = CreateLoadedService(
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>(),
+                BuildUIPrefab<TestElementC>()).ActiveWindow;
 
-            Assert.IsNull(service.ActiveScreen);
-            Assert.AreEqual(0, service.ActivePopups.Count);
-            Assert.AreEqual(0, service.ActivePanels.Count);
+            for (var i = 0; i < window.Elements.Count; i++)
+            {
+                Assert.IsFalse(
+                    window.Elements[i].IsVisible,
+                    $"{window.Elements[i].GetType().Name} was shown by window load");
+            }
+
+            Assert.AreEqual(0, ShowLog.Count, UICallLog.Describe());
         }
 
         // ---- Type-keyed resolution ---------------------------------------------
@@ -243,65 +248,44 @@ namespace UnityEssentials.UI.Tests
         public void GetUI_ResolvesByConcreteType()
         {
             var window = CreateLoadedService(
-                BuildUIPrefab<TestScreenA>(),
-                BuildUIPrefab<TestScreenB>()).ActiveWindow;
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>()).ActiveWindow;
 
-            var resolved = window.GetUI<TestScreenA>();
+            var resolved = window.GetUI<TestElementA>();
 
-            Assert.IsInstanceOf<TestScreenA>(resolved);
-            Assert.AreSame(resolved, window.GetUI(typeof(TestScreenA)));
+            Assert.IsInstanceOf<TestElementA>(resolved);
+            Assert.AreSame(resolved, window.GetUI(typeof(TestElementA)));
         }
 
         [Test]
         public void GetUI_DistinguishesElementsOfDifferentTypes()
         {
             var window = CreateLoadedService(
-                BuildUIPrefab<TestScreenA>(),
-                BuildUIPrefab<TestScreenB>()).ActiveWindow;
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>()).ActiveWindow;
 
-            Assert.AreNotSame(window.GetUI<TestScreenA>(), window.GetUI<TestScreenB>());
+            Assert.AreNotSame(window.GetUI<TestElementA>(), window.GetUI<TestElementB>());
         }
 
         [Test]
         public void SwitchWindow_BindsEveryElementToTheWindow()
         {
-            var service = CreateLoadedService(BuildUIPrefab<TestScreenA>());
+            var service = CreateLoadedService(BuildUIPrefab<TestElementA>());
             var window = service.ActiveWindow;
 
-            Assert.AreSame(window, window.GetUI<TestScreenA>().Window);
+            Assert.AreSame(window, window.GetUI<TestElementA>().Window);
         }
 
-        // ---- Widget prototypes ---------------------------------------------------
-
-        [Test]
-        public void SwitchWindow_DoesNotInstantiateWidgetPrototypes()
-        {
-            var window = CreateLoadedService(
-                new[] { BuildUIPrefab<TestScreenA>() },
-                BuildWidgets(BuildWidgetPrefab<TestWidget>(), BuildWidgetPrefab<TestWidgetB>())).ActiveWindow;
-
-            Assert.AreEqual(0, window.SpawnedWidgets.Count);
-        }
+        // ---- The flat hierarchy ---------------------------------------------------
 
         [Test]
         public void SwitchWindow_CreatesNoChildrenBeyondTheListedElements()
         {
             var window = CreateLoadedService(
-                new[] { BuildUIPrefab<TestScreenA>() },
-                BuildWidgets(BuildWidgetPrefab<TestWidget>(), BuildWidgetPrefab<TestWidgetB>())).ActiveWindow;
+                BuildUIPrefab<TestElementA>(),
+                BuildUIPrefab<TestElementB>()).ActiveWindow;
 
             Assert.AreEqual(window.Elements.Count, window.transform.childCount);
-        }
-
-        [Test]
-        public void SwitchWindow_KeepsWidgetsOutOfTheElementsList()
-        {
-            var window = CreateLoadedService(
-                new[] { BuildUIPrefab<TestScreenA>() },
-                BuildWidgets(BuildWidgetPrefab<TestWidget>())).ActiveWindow;
-
-            Assert.AreEqual(1, window.Elements.Count);
-            Assert.IsInstanceOf<TestScreenA>(window.Elements[0]);
         }
     }
 }

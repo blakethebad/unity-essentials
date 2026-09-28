@@ -34,7 +34,7 @@ Assets/Packages/Utils/
 │   ├── Singletons/Singleton.cs
 │   ├── Singletons/SingletonComponent.cs      (+ internal static SingletonComponentRuntime in same file)
 │   ├── Singletons/SingletonScriptableObject.cs
-│   └── Events/IEvent.cs, IEventBus.cs, EventBus.cs
+│   └── Events/IEvent.cs, EventBus.cs
 └── Tests/
     ├── UnityEssentials.Utilities.Tests.asmdef (clone of Services.Tests template: Editor-only, UNITY_INCLUDE_TESTS, nunit)
     ├── StaticResetRegistryTests.cs
@@ -58,7 +58,7 @@ No `Editor/` folder, no `package.json`, no `Resources/` folder, no hand-authored
 - `SingletonComponent<T>`: `Instance` → quitting? null+warning : cached-alive : `FindAnyObjectByType<T>()` : create hidden GO (`HideFlags.HideAndDontSave`) + `AddComponent`. `DontDestroyOnLoad` only under `Application.isPlaying`. Duplicate `Awake` destroys **the component only** (never the GO) with a warning; `Destroy` vs `DestroyImmediate` branched on `isPlaying`. Unity-`==` for destroyed checks (never `is null`). Non-generic `SingletonComponentRuntime` owns `IsQuitting` + `[RuntimeInitializeOnLoadMethod]` (the attribute never fires on generic types).
 - `SingletonScriptableObject<T>`: lazy `Instance` = `Resources.LoadAll<T>("")` → `internal ResolveInstance(T[] candidates)` (throws with guidance on 0, lists names on ≥2) — `ResolveInstance` is the unit-test seam; `SetInstanceForTests` injection for `CreateInstance`-made assets. Consumer project supplies the Resources asset; repo stays Resources-free.
 
-**EventBus** — `EventBus<TBus> where TBus : struct, IEventBus` with `Subscribe<TEvent>(Action<TEvent>)`, `Unsubscribe`, `Publish<TEvent>(in TEvent evt)`, `Clear<TEvent>()`; `where TEvent : struct, IEvent`. Storage: nested `internal static class Channel<TEvent>` holding **copy-on-write `Action<TEvent>[]`** (never null). Publish iterates a locally captured array → zero-alloc warm, mutation-during-publish trivially safe (snapshot semantics: handler unsubscribed mid-publish still gets this one; subscribed mid-publish starts next one — documented + pinned by tests). Handler exceptions: catch + `Debug.LogException` + continue. Multicast delegate rejected (per-handler catch would force `GetInvocationList()` alloc per publish).
+**EventBus** — non-generic static `EventBus` with `Subscribe<TEvent>(Action<TEvent>)`, `Unsubscribe`, `Publish<TEvent>(in TEvent evt)`, `Clear<TEvent>()`; `where TEvent : struct, IEvent`. Storage: nested `internal static class Channel<TEvent>` holding **copy-on-write `Action<TEvent>[]`** (never null). Publish iterates a locally captured array → zero-alloc warm, mutation-during-publish trivially safe (snapshot semantics: handler unsubscribed mid-publish still gets this one; subscribed mid-publish starts next one — documented + pinned by tests). Handler exceptions: catch + `Debug.LogException` + continue. Multicast delegate rejected (per-handler catch would force `GetInvocationList()` alloc per publish).
 
 **StaticResetRegistry** (shared) — `[RuntimeInitializeOnLoadMethod]` never fires on generic classes and closed-generic statics can't be enumerated, so every generic system registers a clear-action from its static ctor; registry drains but **retains** actions (static ctors don't re-run with domain reload off). Also owns `MainThreadId` + `[Conditional] AssertMainThread`. All statics get inline initializers (EditMode never fires RuntimeInitializeOnLoadMethod — `ServiceRegistry.cs:16-19` precedent).
 
