@@ -14,6 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEssentials.UI::UnityEssentials.UI.WindowData
   uiPrefabs:
   - {fileID: 3311777798481821581, guid: b8ff2a3993062fb4fbcf6950d863dc84, type: 3}
+  - {fileID: 4832815313175679600, guid: cb41baee3fda7384f8cc678166f669de, type: 3}
+  - {fileID: 8767667397059280372, guid: ae06f419da9e3454fa9fa57aef8ff196, type: 3}
   canvas:
     sortingLayerName: Default
     sortingOrder: 0

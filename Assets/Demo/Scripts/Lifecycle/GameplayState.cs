@@ -9,34 +9,41 @@ public class GameplayState : BaseState<LifetimeStateManager, LifetimeState>
 {
     public override LifetimeState StateType => LifetimeState.GameplayState;
 
+	private UIService _uiService;
 	private Timer _levelTimer;
+	private Board _activeBoard;
+
+	public GameplayState()
+	{
+		ServiceLocator.TryGet<UIService>(out _uiService);
+	}
 
     protected override void OnEnterState(LifetimeState previousState)
     {
-		var uiService = ServiceLocator.Get<UIService>();
-		uiService.SwitchWindow(Manager.mainWindowData);
-
 		_levelTimer = new Timer(60f);
 
-		uiService.ShowUI<LevelScreen>(new LevelScreenData()
+		_uiService.ShowUI<LevelScreen>(new LevelScreenData()
 		{
 			levelTimer = _levelTimer
 		});
 
+		_activeBoard = Object.Instantiate(Manager.boardPrefab);
+		_activeBoard.GenerateObjects(Manager.tempObjectPool);
+
 		_levelTimer.Completed += OnTimerCompleted;
 		_levelTimer.Start();
+    }
 
-		Board board = Object.Instantiate(Manager.board);
-
-		board.GenerateObjects(Manager.tempObjectPool);
+    protected override void OnExitState(LifetimeState nextState)
+    {
+		//clear the board here
+		_uiService.HideUI<LevelScreen>();
+		_activeBoard.ClearBoard();
     }
 
 	private void OnTimerCompleted()
 	{
-		//TODO: Implement this later
-		EditorApplication.ExitPlaymode();
-		// var uiService = ServiceLocator.Get<UIService>();
-		// uiService.ShowUI<LevelEndPopup>();
+		_uiService.ShowUI<LevelEndPopup>(new LevelEndPopupData());
 	}
 }
 

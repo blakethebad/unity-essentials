@@ -108,6 +108,14 @@ public class Board : MonoBehaviour
 		}
 	}
 
+	public void ClearBoard()
+	{
+		foreach(var entity in _activeEntites)
+		{
+			Object.Destroy(entity.gameObject);
+		}
+	}
+
 	//Generates a random point inside the inverse collider volume while considering other spawned objects.
 	//The sampling area is inset by the object's radius so the whole object fits inside the walls.
 	private Vector3 GenerateRandomObjectPosition(float objectRadius)
