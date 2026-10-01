@@ -27,7 +27,7 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void RestartState_DefaultImplementation_CallsExitThenEnterOnSameState()
         {
-            var machine = SoloMachine(new RecordingState(TestState.A));
+            var machine = SoloMachine(TestState.A, new RecordingState());
 
             machine.RestartState();
 
@@ -41,7 +41,7 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void RestartState_PassesOwnStateTypeToExitAndEnter()
         {
-            var machine = PairMachine(new RecordingState(TestState.A), new RecordingState(TestState.B));
+            var machine = PairMachine(TestState.A, new RecordingState(), TestState.B, new RecordingState());
             machine.ChangeState(TestState.B);
 
             // The A -> B transition's own hooks would otherwise head the expectation below.
@@ -63,8 +63,8 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void RestartState_DoesNotChangeCurrentState()
         {
-            var b = new RecordingState(TestState.B);
-            var machine = PairMachine(new RecordingState(TestState.A), b);
+            var b = new RecordingState();
+            var machine = PairMachine(TestState.A, new RecordingState(), TestState.B, b);
             machine.ChangeState(TestState.B);
 
             machine.RestartState();
@@ -80,8 +80,8 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void RestartState_DoesNotChangePreviousState()
         {
-            var a = new RecordingState(TestState.A);
-            var machine = PairMachine(a, new RecordingState(TestState.B));
+            var a = new RecordingState();
+            var machine = PairMachine(TestState.A, a, TestState.B, new RecordingState());
 
             machine.RestartState();
 
@@ -107,7 +107,7 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void RestartState_FiresNoEvents()
         {
-            var machine = SoloMachine(new RecordingState(TestState.A));
+            var machine = SoloMachine(TestState.A, new RecordingState());
 
             var exitedCount = 0;
             var enteredCount = 0;
@@ -134,7 +134,7 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void RestartState_RequiresNoTransitionTableEntry()
         {
-            var machine = SoloMachine(new RecordingState(TestState.A));
+            var machine = SoloMachine(TestState.A, new RecordingState());
 
             // Establishes that the self-pair really is undeclared, so the restart below cannot be
             // passing merely because the table happened to permit A -> A.
@@ -154,7 +154,7 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void RestartState_OverriddenImplementation_ReplacesExitEnterSequence()
         {
-            var machine = SoloMachine(new CustomRestartState(TestState.A));
+            var machine = SoloMachine(TestState.A, new CustomRestartState());
 
             machine.RestartState();
 
@@ -172,7 +172,7 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void RestartState_ChangeStateDuringRestart_ThrowsStateManagerException()
         {
-            var machine = PairMachine(new ChangeOnExitState(TestState.A, TestState.B), new RecordingState(TestState.B));
+            var machine = PairMachine(TestState.A, new ChangeOnExitState(TestState.B), TestState.B, new RecordingState());
 
             // A -> B is registered and declared, so the guard is the only thing left that can
             // reject the probe's request.
@@ -199,11 +199,11 @@ namespace UnityEssentials.States.Tests
         // One state and an empty transition table, then an emptied CallLog so assertions read as the
         // restart's own output. No transition is declared because none is needed: restart never
         // consults the table, so every test built this way would fail if that ever changed.
-        private static BaseStateManager<TestState> SoloMachine(BaseState<TestState> state)
+        private static BaseStateManager<TestState> SoloMachine(TestState stateType, BaseState<TestState> state)
         {
             var machine = new PlainStateManager();
-            machine.AddState(state)
-                .SetInitialState(state.StateType);
+            machine.AddState(stateType, state)
+                .SetInitialState(stateType);
 
             machine.Initialize();
 
@@ -213,12 +213,16 @@ namespace UnityEssentials.States.Tests
 
         // Starts on `from` and is allowed to move to `to`, for the tests that need a real transition
         // behind or ahead of the restart. The reverse pair is deliberately left undeclared.
-        private static BaseStateManager<TestState> PairMachine(BaseState<TestState> from, BaseState<TestState> to)
+        private static BaseStateManager<TestState> PairMachine(
+            TestState fromType,
+            BaseState<TestState> from,
+            TestState toType,
+            BaseState<TestState> to)
         {
-            var machine = new PlainStateManager((from.StateType, to.StateType));
-            machine.AddState(from)
-                .AddState(to)
-                .SetInitialState(from.StateType);
+            var machine = new PlainStateManager((fromType, toType));
+            machine.AddState(fromType, from)
+                .AddState(toType, to)
+                .SetInitialState(fromType);
 
             machine.Initialize();
 

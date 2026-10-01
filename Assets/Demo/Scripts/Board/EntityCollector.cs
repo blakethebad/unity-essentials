@@ -5,6 +5,7 @@ using UnityEssentials.Utilities;
 [RequireComponent(typeof(CapsuleCollider))]
 public class EntityCollector : MonoBehaviour
 {
+	public Board Board;
 	public CapsuleCollider Collider => _collider;
 	[SerializeField] private CapsuleCollider _collider;
 
@@ -35,18 +36,13 @@ public class EntityCollector : MonoBehaviour
 		if(_storedEntities.Count >= Capacity || (_storedEntities.Count > 0 && _storedEntities[0].Id != boardEntity.Id))
 			return;
 
-		boardEntity.Store();
-		boardEntity.transform.position = GetSlotPosition(_storedEntities.Count); // Later place with tween in 0.6 seconds
-		boardEntity.transform.rotation = Quaternion.identity; // Later rotate with tween in 0.6 seconds
+		boardEntity.SetStored(GetSlotPosition(_storedEntities.Count), Quaternion.identity);
 		_storedEntities.Add(boardEntity);
 		
 		if(_storedEntities.Count == Capacity)
 		{
-			Object.Destroy(_storedEntities[0].gameObject);
-			Object.Destroy(_storedEntities[1].gameObject);
+			Board.OnEntitesMatched(_storedEntities[0], _storedEntities[1]);
 			_storedEntities.Clear();
-
-			EventBus.Publish<EntityCollectedEvent>(new EntityCollectedEvent());
 		}
 	}
 

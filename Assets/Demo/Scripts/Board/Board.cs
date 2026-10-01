@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEssentials.Colliders;
 using UnityEssentials.Utilities;
@@ -27,6 +26,10 @@ public class Board : MonoBehaviour
 
 	private int _fittedScreenWidth;
 	private int _fittedScreenHeight;
+
+	private int _baseMatchScore = 1;
+	private int _currentMatchMultiplier = 1;
+	private int _currentSessionScore;
 
 	//Going to keep the input logic here for now but later should move into the new unity input system
 	private void Update()
@@ -83,29 +86,48 @@ public class Board : MonoBehaviour
 	}
 
 	//For now lets use just a single pool of objects. Later we will have different count of objects for levels
-	public void GenerateObjects(List<BoardEntity> entityPrefabs)
+	public void SpawnLevel(LevelData levelData)
 	{
 		FitBoardToScreen();
 
+		_currentSessionScore = 0;
 		_activeEntites = new List<BoardEntity>();
 
-		for(var prefabIndex = 0; prefabIndex < entityPrefabs.Count; prefabIndex++)
+		var prefabIndex = 0;
+		foreach(var entity in levelData.levelEntities)
 		{
 			//Radius comes from the prefab so the entity can spawn directly at its final position;
 			//moving an interpolated rigidbody after Instantiate gets overwritten by its physics pose
-			var objectRadius = entityPrefabs[prefabIndex].ComputeBoundingRadius();
+			var objectRadius = entity.prefab.ComputeBoundingRadius();
 
-			for(var i = 0; i < 24; i++)
+			for(var i = 0; i < entity.count; i++)
 			{
 				var objectPosition = GenerateRandomObjectPosition(objectRadius);
 				var objectRotation = GenerateRandomObjectRotation();
 
-				var spawnedEntity = Object.Instantiate(entityPrefabs[prefabIndex], objectPosition, objectRotation, objectParent);
-				//using the prefab index as the id for now, until the object specification system exists
+				var spawnedEntity = Object.Instantiate(entity.prefab, objectPosition, objectRotation, objectParent);
 				spawnedEntity.Initialize(prefabIndex);
+
 				_activeEntites.Add(spawnedEntity);
 			}
+
+			prefabIndex++;
 		}
+	}
+
+	public void OnEntitesMatched(BoardEntity firstEntity, BoardEntity secondEntity)
+	{
+		_activeEntites.Remove(firstEntity);
+		_activeEntites.Remove(secondEntity);
+
+		Object.Destroy(firstEntity.gameObject);
+		Object.Destroy(secondEntity.gameObject);
+
+		_currentSessionScore += _baseMatchScore * _currentMatchMultiplier;
+		EventBus.Publish<EntityCollectedEvent>(new EntityCollectedEvent()
+		{
+			CurrentScore = _currentSessionScore
+		});
 	}
 
 	public void ClearBoard()
@@ -120,6 +142,8 @@ public class Board : MonoBehaviour
 	//The sampling area is inset by the object's radius so the whole object fits inside the walls.
 	private Vector3 GenerateRandomObjectPosition(float objectRadius)
 	{
+		//TODO: Dunyanin en kotu kodu falan herhalde
+		_entityCollector.Board = this;
 		var bestCandidate = GenerateRandomPointInsideArea(objectRadius);
 		var bestDistance = DistanceToClosestEntity(bestCandidate);
 
@@ -150,8 +174,6 @@ public class Board : MonoBehaviour
 				bestCandidate = nudgedCandidate;
 		}
 		return bestCandidate;
-
-
 	}
 
 	//Adjusts the board collider to the bounds of the screen so that we can show the same view in every screen

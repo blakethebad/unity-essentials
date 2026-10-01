@@ -82,9 +82,9 @@ namespace UnityEssentials.States.Tests
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.C));
 
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B))
-                .AddState(new SilentState(TestState.C))
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState())
+                .AddState(TestState.C, new SilentState())
                 .SetInitialState(TestState.A);
 
             machine.Initialize();
@@ -141,8 +141,8 @@ namespace UnityEssentials.States.Tests
         public void Initialize_RegistersMachineExactlyOnce_AndBumpsVersion()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B));
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState());
 
             CollectionAssert.IsEmpty(AliveEntries(), "A configured but uninitialized machine must not be registered.");
 
@@ -250,8 +250,8 @@ namespace UnityEssentials.States.Tests
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A));
 
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B))
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -398,8 +398,8 @@ namespace UnityEssentials.States.Tests
         public void Registration_DoesNotPerturbUserEventOrdering()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -468,7 +468,7 @@ namespace UnityEssentials.States.Tests
             _hosts.Add(orphanOwner);
 
             var orphanedMachine = new PlainStateManager();
-            orphanedMachine.AddState(new SilentState(TestState.A));
+            orphanedMachine.AddState(TestState.A, new SilentState());
             StateMachineDebugRegistry.Register(orphanedMachine, orphanOwner);
 
             Assert.AreEqual(1, AliveEntries().Count);
@@ -524,8 +524,8 @@ namespace UnityEssentials.States.Tests
         private static WeakReference CreateAndAbandonMachine()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B))
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 

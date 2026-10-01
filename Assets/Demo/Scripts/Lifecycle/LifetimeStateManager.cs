@@ -12,38 +12,49 @@ public enum LifetimeState
 
 public class LifetimeStateManager : BaseStateManager<LifetimeState>, IFlowService
 {
+	public LevelData CurrentLevel { get; private set; }
 	public Board boardPrefab;
-	public List<BoardEntity> tempObjectPool;
 
-	public LifetimeStateManager(Board boardPrefab, List<BoardEntity> tempObjectPool)
+	private ILevelService _levelService;
+
+	public LifetimeStateManager(Board boardPrefab)
 	{
 		this.boardPrefab = boardPrefab;
-		this.tempObjectPool = tempObjectPool;
+		_levelService = ServiceLocator.Get<ILevelService>(); //TODO: Normally using this on constructor is really bad. Lets find a better way.
 	}
 
     protected override void OnInitialize()
     {
-		AddState(new InitializeState());
-		AddState(new MainMenuState());
-		AddState(new GameplayState());
+		var initializeState = new InitializeState();
+		var mainMenuState = new MainMenuState();
+		var gameplayState = new GameplayState();
+
+		var initializeStateTransitions = new List<LifetimeState> { LifetimeState.MainMenuState, LifetimeState.GameplayState };
+		var mainMenuTransitions = new List<LifetimeState> { LifetimeState.GameplayState };
+		var gameplayTransitions = new List<LifetimeState> { LifetimeState.MainMenuState, LifetimeState.GameplayState };
+
+		AddState(LifetimeState.InitializeState, initializeState, initializeStateTransitions);
+		AddState(LifetimeState.MainMenuState, mainMenuState, mainMenuTransitions);
+		AddState(LifetimeState.GameplayState, gameplayState, gameplayTransitions);
 	}
 
-    protected override void InsertTransitions(in Transitions<LifetimeState> transitions)
+    public void StartNextLevel()
     {
-		transitions.Allow(LifetimeState.InitializeState, LifetimeState.MainMenuState);
-		transitions.Allow(LifetimeState.InitializeState, LifetimeState.GameplayState);
-		transitions.Allow(LifetimeState.MainMenuState, LifetimeState.GameplayState);
-		transitions.Allow(LifetimeState.GameplayState, LifetimeState.MainMenuState);
+		var levelData = _levelService.GetLevelWithIndex(0); //TODO: Right now we don't have a saving system. So lets move on with only using the first level.
+		CurrentLevel = levelData;
+		ChangeState(LifetimeState.GameplayState);
     }
 
-    public void StartLevel()
+    public void RestartLastLevel()
     {
-        throw new System.NotImplementedException();
+		var levelData = _levelService.GetLevelWithIndex(0); //TODO: Right now we don't have a saving system. So lets move on with only using the first level.
+		CurrentLevel = levelData;
+		ChangeState(LifetimeState.GameplayState);
     }
 
     public void QuitLevel()
     {
-        throw new System.NotImplementedException();
+		ChangeState(LifetimeState.MainMenuState);
     }
 }
 

@@ -1,10 +1,11 @@
 using System;
+using System.Collections.Generic;
 
 namespace UnityEssentials.States
 {
     /// <summary>
-    /// The machine-facing base of one state: the enum value it implements, the hooks the machine
-    /// calls and the ownership it is attached under. Not derivable directly — author states by
+    /// The machine-facing base of one state: the enum value it was registered under, the hooks the
+    /// machine calls and the ownership it is attached under. Not derivable directly — author states by
     /// deriving from <see cref="BaseState{TManager, TState}"/>, which adds the typed manager.
     /// </summary>
     public abstract class BaseState<TState> where TState : struct, Enum
@@ -18,16 +19,16 @@ namespace UnityEssentials.States
         }
 
         /// <summary>
-        /// The enum value this state implements: the key its machine stores it under, so it must be
-        /// constant for the lifetime of the object and unique within a machine.
+        /// The enum value this state answers for, assigned by the machine when <c>AddState</c>
+        /// registers it — the state itself does not declare it. Default until then, fixed after.
         /// </summary>
-        public abstract TState StateType { get; }
+        public TState StateType { get; private set; }
 
         internal IStateManager<TState> Owner { get; private set; }
 
-        // Called by AddState. Re-attaching to the same manager is a no-op so a failed registration
-        // can be retried; a different manager is a configuration error.
-        internal void Attach(IStateManager<TState> manager)
+        // Called by AddState. Re-attaching under the same manager and key is a no-op so a failed
+        // registration can be retried; a different manager or key is a configuration error.
+        internal void Attach(IStateManager<TState> manager, TState stateType)
         {
             if (Owner != null)
             {
@@ -38,11 +39,19 @@ namespace UnityEssentials.States
                         "Create a separate state instance for each machine.");
                 }
 
+                if (!EqualityComparer<TState>.Default.Equals(StateType, stateType))
+                {
+                    throw new StateConfigurationException(
+                        $"State '{GetType().Name}' is already registered as '{StateType}' and cannot also answer for '{stateType}'. " +
+                        "Create a separate state instance for each enum value.");
+                }
+
                 return;
             }
 
-            // OnAttach runs before Owner is stored, so a rejected manager type leaves the state
-            // unattached and reusable.
+            // The key lands before OnAttach so a refused manager type can name the state it turned
+            // down; Owner stays null, which leaves the state unattached and reusable.
+            StateType = stateType;
             OnAttach(manager);
             Owner = manager;
         }

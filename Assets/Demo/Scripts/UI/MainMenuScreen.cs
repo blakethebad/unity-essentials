@@ -31,6 +31,6 @@ public class MainMenuScreen : UIBase
 
 	private void OnPlayButtonPressed()
 	{
-		_gameFlowHandler.StartLevel();
+		_gameFlowHandler.StartNextLevel();
 	}
 }

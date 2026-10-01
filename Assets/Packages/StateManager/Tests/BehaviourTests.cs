@@ -429,11 +429,11 @@ namespace UnityEssentials.States.Tests
         public void Behaviour_InterfaceTypedState_AttachesWithBehaviourAsManager()
         {
             var host = CreateHost();
-            var shared = new AnyManagerState(TestState.C);
+            var shared = new AnyManagerState();
 
             // Registering from outside also proves AddState hands the behaviour back, so external
             // chains keep targeting the host rather than the machine behind it.
-            Assert.AreSame(host, host.AddState(shared));
+            Assert.AreSame(host, host.AddState(TestState.C, shared));
 
             host.InvokeAwake();
             host.InvokeStart();

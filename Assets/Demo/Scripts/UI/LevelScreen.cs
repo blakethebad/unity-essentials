@@ -26,23 +26,20 @@ public class LevelScreen : UIBase
 			return;
 		}
 
-		EventBus.Subscribe<EntityCollectedEvent>(OnEntityCollected);
-		EventBus.Subscribe<EntityGrabbedEvent>(Test_OnEntityGrabbed);
 
 		_levelTimer = levelScreenData.levelTimer;
 
-		// No second is displayed yet, and -1 is a second the timer can never report, so the first
-		// refresh always writes the text instead of matching a stale cache.
 		_displayedSeconds = -1;
 		RefreshTimerText();
+		scoreText.SetText("0");
+		
+		EventBus.Subscribe<EntityCollectedEvent>(OnEntityCollected);
     }
 
     protected override void OnHide()
     {
-		EventBus.Unsubscribe<EntityCollectedEvent>(OnEntityCollected);
-		EventBus.Unsubscribe<EntityGrabbedEvent>(Test_OnEntityGrabbed);
-
 		_levelTimer = null;
+		EventBus.Unsubscribe<EntityCollectedEvent>(OnEntityCollected);
     }
 
 	private void Update()
@@ -53,19 +50,13 @@ public class LevelScreen : UIBase
 	private void RefreshTimerText()
 	{
 		if (_levelTimer == null)
-		{
 			return;
-		}
 
 		var remaining = _levelTimer.Remaining;
 
-		// The text only changes once a second, so formatting every frame would allocate a string
-		// per frame to write the same digits back.
 		var wholeSeconds = Mathf.CeilToInt(remaining);
 		if (wholeSeconds == _displayedSeconds)
-		{
 			return;
-		}
 
 		_displayedSeconds = wholeSeconds;
 		timerText.SetText(remaining.ToTimeString(roundUp: true));
@@ -73,11 +64,6 @@ public class LevelScreen : UIBase
 
 	private void OnEntityCollected(EntityCollectedEvent entityCollectedEvent)
 	{
-		Log.Error("Entity got collected");
-	}
-
-	private void Test_OnEntityGrabbed(EntityGrabbedEvent entityGrabbedEvent)
-	{
-		Log.Error($"Entity with name {entityGrabbedEvent.EntityName}");
+		scoreText.SetText(entityCollectedEvent.CurrentScore.ToString());
 	}
 }

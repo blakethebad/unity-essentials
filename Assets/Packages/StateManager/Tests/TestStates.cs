@@ -52,16 +52,6 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public class RecordingState : BaseState<IStateManager<TestState>, TestState>
     {
-        private readonly TestState _stateType;
-
-        /// <summary>Creates a state answering for one enum value.</summary>
-        public RecordingState(TestState stateType)
-        {
-            _stateType = stateType;
-        }
-
-        public override TestState StateType => _stateType;
-
         // RestartState is deliberately left alone, so restart fixtures observe the inherited
         // exit-then-enter default; CustomRestartState covers the overriding case.
 
@@ -87,11 +77,6 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public sealed class CustomRestartState : RecordingState
     {
-        /// <summary>Creates the state.</summary>
-        public CustomRestartState(TestState stateType) : base(stateType)
-        {
-        }
-
         /// <summary>Records <c>"CustomRestart:{StateType}"</c> and nothing else.</summary>
         public override void RestartState()
         {
@@ -101,20 +86,11 @@ namespace UnityEssentials.States.Tests
     }
 
     /// <summary>
-    /// A state with nothing but an identity: every hook keeps its empty default. Used by allocation
+    /// A state that does nothing at all: every hook keeps its empty default. Used by allocation
     /// tests, where the recording doubles' interpolated strings would dominate the measurement.
     /// </summary>
     public sealed class SilentState : BaseState<IStateManager<TestState>, TestState>
     {
-        private readonly TestState _stateType;
-
-        /// <summary>Creates the state.</summary>
-        public SilentState(TestState stateType)
-        {
-            _stateType = stateType;
-        }
-
-        public override TestState StateType => _stateType;
     }
 
     // ---- Re-entrancy probes -------------------------------------------------
@@ -126,17 +102,13 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public sealed class ChangeOnEnterState : BaseState<IStateManager<TestState>, TestState>
     {
-        private readonly TestState _stateType;
         private readonly TestState _target;
 
         /// <summary>Creates the probe, which requests <paramref name="target"/> on entry.</summary>
-        public ChangeOnEnterState(TestState stateType, TestState target)
+        public ChangeOnEnterState(TestState target)
         {
-            _stateType = stateType;
             _target = target;
         }
-
-        public override TestState StateType => _stateType;
 
         protected override void OnEnterState(TestState previousState)
         {
@@ -150,19 +122,15 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public sealed class DoubleChangeOnEnterState : BaseState<IStateManager<TestState>, TestState>
     {
-        private readonly TestState _stateType;
         private readonly TestState _first;
         private readonly TestState _second;
 
         /// <summary>Creates the probe, which requests <paramref name="first"/> then <paramref name="second"/> on entry.</summary>
-        public DoubleChangeOnEnterState(TestState stateType, TestState first, TestState second)
+        public DoubleChangeOnEnterState(TestState first, TestState second)
         {
-            _stateType = stateType;
             _first = first;
             _second = second;
         }
-
-        public override TestState StateType => _stateType;
 
         protected override void OnEnterState(TestState previousState)
         {
@@ -178,17 +146,13 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public sealed class ChangeOnExitState : BaseState<IStateManager<TestState>, TestState>
     {
-        private readonly TestState _stateType;
         private readonly TestState _target;
 
         /// <summary>Creates the probe, which will illegally request <paramref name="target"/> on exit.</summary>
-        public ChangeOnExitState(TestState stateType, TestState target)
+        public ChangeOnExitState(TestState target)
         {
-            _stateType = stateType;
             _target = target;
         }
-
-        public override TestState StateType => _stateType;
 
         protected override void OnExitState(TestState nextState)
         {
@@ -202,17 +166,13 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public sealed class ChangeOnUpdateState : BaseState<IStateManager<TestState>, TestState>
     {
-        private readonly TestState _stateType;
         private readonly TestState _target;
 
         /// <summary>Creates the probe, which requests <paramref name="target"/> on every tick.</summary>
-        public ChangeOnUpdateState(TestState stateType, TestState target)
+        public ChangeOnUpdateState(TestState target)
         {
-            _stateType = stateType;
             _target = target;
         }
-
-        public override TestState StateType => _stateType;
 
         protected override void OnUpdate()
         {
@@ -229,16 +189,6 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public sealed class TickOnEnterState : BaseState<IStateManager<TestState>, TestState>
     {
-        private readonly TestState _stateType;
-
-        /// <summary>Creates the probe.</summary>
-        public TickOnEnterState(TestState stateType)
-        {
-            _stateType = stateType;
-        }
-
-        public override TestState StateType => _stateType;
-
         protected override void OnEnterState(TestState previousState)
         {
             Manager.Tick();
@@ -255,16 +205,6 @@ namespace UnityEssentials.States.Tests
     public sealed class ThrowingEnterState : BaseState<IStateManager<TestState>, TestState>
     {
         public const string FailureMessage = "ThrowingEnterState failed on purpose";
-
-        private readonly TestState _stateType;
-
-        /// <summary>Creates the probe.</summary>
-        public ThrowingEnterState(TestState stateType)
-        {
-            _stateType = stateType;
-        }
-
-        public override TestState StateType => _stateType;
 
         protected override void OnEnterState(TestState previousState)
         {
@@ -283,16 +223,6 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public sealed class PlainManagerState : BaseState<PlainStateManager, TestState>
     {
-        private readonly TestState _stateType;
-
-        /// <summary>Creates the probe.</summary>
-        public PlainManagerState(TestState stateType)
-        {
-            _stateType = stateType;
-        }
-
-        public override TestState StateType => _stateType;
-
         /// <summary>Widens the protected typed manager for assertions; null until the state is attached.</summary>
         public PlainStateManager ObservedManager => Manager;
     }
@@ -303,16 +233,6 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public sealed class AnyManagerState : BaseState<IStateManager<TestState>, TestState>
     {
-        private readonly TestState _stateType;
-
-        /// <summary>Creates the probe.</summary>
-        public AnyManagerState(TestState stateType)
-        {
-            _stateType = stateType;
-        }
-
-        public override TestState StateType => _stateType;
-
         /// <summary>Widens the protected typed manager for assertions; null until the state is attached.</summary>
         public IStateManager<TestState> ObservedManager => Manager;
     }
@@ -323,17 +243,13 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public sealed class TypedBehaviourState : BaseState<TypedFlowBehaviour, TestState>
     {
-        private readonly TestState _stateType;
         private readonly TestState _target;
 
         /// <summary>Creates the probe, which requests <paramref name="target"/> on every tick.</summary>
-        public TypedBehaviourState(TestState stateType, TestState target)
+        public TypedBehaviourState(TestState target)
         {
-            _stateType = stateType;
             _target = target;
         }
-
-        public override TestState StateType => _stateType;
 
         /// <summary>Widens the protected typed manager for assertions; null until the state is attached.</summary>
         public TypedFlowBehaviour ObservedManager => Manager;
@@ -473,10 +389,6 @@ namespace UnityEssentials.States.Tests
         protected override void OnInitialize()
         {
         }
-
-        protected override void InsertTransitions(in Transitions<TestState> transitions)
-        {
-        }
     }
 
     // ---- MonoBehaviour hosts ------------------------------------------------
@@ -496,8 +408,8 @@ namespace UnityEssentials.States.Tests
         {
             // The initial state is set explicitly even though A registers first: the behaviour
             // fixture should fail on a wiring change, not on a change to the first-registered default.
-            AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
+            AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
         }
 
@@ -532,24 +444,18 @@ namespace UnityEssentials.States.Tests
     /// </summary>
     public sealed class TypedFlowBehaviour : StateManagerBehaviour<TestState>
     {
-        public TypedBehaviourState StateA { get; } = new TypedBehaviourState(TestState.A, TestState.B);
+        public TypedBehaviourState StateA { get; } = new TypedBehaviourState(TestState.B);
 
-        public TypedBehaviourState StateB { get; } = new TypedBehaviourState(TestState.B, TestState.A);
+        public TypedBehaviourState StateB { get; } = new TypedBehaviourState(TestState.A);
 
         /// <summary>Widens the protected hosted machine to public for assertions against it.</summary>
         public BaseStateManager<TestState> MachineForTests => Machine;
 
         protected override void OnInitialize()
         {
-            AddState(StateA)
-                .AddState(StateB)
+            AddState(TestState.A, StateA, new[] { TestState.B })
+                .AddState(TestState.B, StateB, new[] { TestState.A })
                 .SetInitialState(TestState.A);
-        }
-
-        protected override void InsertTransitions(in Transitions<TestState> transitions)
-        {
-            transitions.Allow(TestState.A, TestState.B)
-                .Allow(TestState.B, TestState.A);
         }
 
         /// <summary>Runs the behaviour's <c>Awake</c>.</summary>
@@ -588,9 +494,9 @@ namespace UnityEssentials.States.Tests
         {
             HookLog.Add(OnInitializeEntry);
 
-            AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C))
+            AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.C);
         }
 
@@ -622,12 +528,8 @@ namespace UnityEssentials.States.Tests
     {
         protected override void OnInitialize()
         {
-            AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.A));
-        }
-
-        protected override void InsertTransitions(in Transitions<TestState> transitions)
-        {
+            AddState(TestState.B, new RecordingState())
+                .AddState(TestState.A, new RecordingState());
         }
 
         /// <summary>Runs the behaviour's <c>Awake</c>.</summary>

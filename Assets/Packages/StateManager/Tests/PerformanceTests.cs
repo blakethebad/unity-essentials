@@ -45,8 +45,8 @@ namespace UnityEssentials.States.Tests
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A));
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B));
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState());
             machine.Initialize();
 
             // A full A -> B -> A round trip rather than a single change, so the measured lambda
@@ -75,8 +75,8 @@ namespace UnityEssentials.States.Tests
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A));
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B));
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState());
             machine.Initialize();
 
             // Empty bodies on purpose: any work here would be measured as the machine's cost.
@@ -107,8 +107,8 @@ namespace UnityEssentials.States.Tests
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A));
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B));
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState());
             machine.Initialize();
 
             machine.Tick();
@@ -128,8 +128,8 @@ namespace UnityEssentials.States.Tests
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A));
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B));
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState());
             machine.Initialize();
 
             machine.RestartState();
@@ -154,8 +154,8 @@ namespace UnityEssentials.States.Tests
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A),
                 (TestState.A, TestState.A));
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B));
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState());
             machine.Initialize();
 
             _sink = machine.CanChangeState(TestState.A, TestState.B);

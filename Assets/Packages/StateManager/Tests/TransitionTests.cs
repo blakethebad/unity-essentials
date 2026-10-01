@@ -31,9 +31,9 @@ namespace UnityEssentials.States.Tests
         private static BaseStateManager<TestState> AbcMachine(params (TestState from, TestState to)[] pairs)
         {
             var machine = new PlainStateManager(pairs);
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState());
 
             return machine;
         }
@@ -42,9 +42,9 @@ namespace UnityEssentials.States.Tests
         private static BaseStateManager<TestState> AbcMachineAllowingAll()
         {
             var machine = PlainStateManager.AllowingAll();
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState());
 
             return machine;
         }
@@ -54,10 +54,10 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void ChangeState_AllowedTransition_UpdatesCurrentStateAndType()
         {
-            var b = new RecordingState(TestState.B);
+            var b = new RecordingState();
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(b)
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, b)
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -70,10 +70,10 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void ChangeState_AllowedTransition_UpdatesPreviousStateAndType()
         {
-            var a = new RecordingState(TestState.A);
+            var a = new RecordingState();
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(a)
-                .AddState(new RecordingState(TestState.B))
+            machine.AddState(TestState.A, a)
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -91,16 +91,16 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void ChangeState_ChainOfTransitions_TracksPreviousStateEachStep()
         {
-            var a = new RecordingState(TestState.A);
-            var b = new RecordingState(TestState.B);
-            var c = new RecordingState(TestState.C);
+            var a = new RecordingState();
+            var b = new RecordingState();
+            var c = new RecordingState();
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.C),
                 (TestState.C, TestState.A));
-            machine.AddState(a)
-                .AddState(b)
-                .AddState(c)
+            machine.AddState(TestState.A, a)
+                .AddState(TestState.B, b)
+                .AddState(TestState.C, c)
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -219,10 +219,10 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void ChangeState_SelfTransition_SetsPreviousStateToSameType()
         {
-            var a = new RecordingState(TestState.A);
+            var a = new RecordingState();
             var machine = new PlainStateManager((TestState.A, TestState.A));
-            machine.AddState(a)
-                .AddState(new RecordingState(TestState.B))
+            machine.AddState(TestState.A, a)
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -318,9 +318,9 @@ namespace UnityEssentials.States.Tests
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.C));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new ChangeOnEnterState(TestState.B, TestState.C))
-                .AddState(new RecordingState(TestState.C))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new ChangeOnEnterState(TestState.C))
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -352,9 +352,9 @@ namespace UnityEssentials.States.Tests
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A),
                 (TestState.B, TestState.C));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new DoubleChangeOnEnterState(TestState.B, TestState.A, TestState.C))
-                .AddState(new RecordingState(TestState.C))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new DoubleChangeOnEnterState(TestState.A, TestState.C))
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -378,9 +378,9 @@ namespace UnityEssentials.States.Tests
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.C),
                 (TestState.C, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new ChangeOnEnterState(TestState.B, TestState.C))
-                .AddState(new ChangeOnEnterState(TestState.C, TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new ChangeOnEnterState(TestState.C))
+                .AddState(TestState.C, new ChangeOnEnterState(TestState.B))
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -395,8 +395,8 @@ namespace UnityEssentials.States.Tests
             // call site, so the entry hook is what the InvalidTransitionException escapes from — and
             // it reaches the caller wrapped by the transition that ran the hook.
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new ChangeOnEnterState(TestState.B, TestState.A))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new ChangeOnEnterState(TestState.A))
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -411,9 +411,9 @@ namespace UnityEssentials.States.Tests
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.A, TestState.C));
-            machine.AddState(new ChangeOnExitState(TestState.A, TestState.C))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C))
+            machine.AddState(TestState.A, new ChangeOnExitState(TestState.C))
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -462,8 +462,8 @@ namespace UnityEssentials.States.Tests
         public void ChangeState_EnterStateThrows_MachineEndsInTargetState()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new ThrowingEnterState(TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new ThrowingEnterState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -488,8 +488,8 @@ namespace UnityEssentials.States.Tests
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new ThrowingEnterState(TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new ThrowingEnterState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 

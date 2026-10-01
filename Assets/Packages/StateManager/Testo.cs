@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEssentials.States;
 
 public enum TestoState
@@ -11,22 +12,19 @@ public class Testo : BaseStateManager<TestoState>
 {
     protected override void OnInitialize()
     {
-        AddState(new IdleTestoState());
-        AddState(new ActiveTestoState());
-        AddState(new DeadTestoState());
-    }
+        AddState(TestoState.Idle, new IdleTestoState(), new List<TestoState>
+        {
+            TestoState.Active,
+            TestoState.Dead
+        });
 
-    protected override void InsertTransitions(in Transitions<TestoState> transitions)
-    {
-        transitions.Allow(TestoState.Idle, TestoState.Active);
-        transitions.Allow(TestoState.Idle, TestoState.Dead);
+        AddState(TestoState.Active, new ActiveTestoState());
+        AddState(TestoState.Dead, new DeadTestoState());
     }
 }
 
 public class IdleTestoState : BaseState<Testo, TestoState>
 {
-    public override TestoState StateType => TestoState.Idle;
-
     protected override void OnEnterState(TestoState previousState)
     {
     }
@@ -34,10 +32,8 @@ public class IdleTestoState : BaseState<Testo, TestoState>
 
 public class ActiveTestoState : BaseState<Testo, TestoState>
 {
-    public override TestoState StateType => TestoState.Active;
 }
 
 public class DeadTestoState : BaseState<Testo, TestoState>
 {
-    public override TestoState StateType => TestoState.Dead;
 }

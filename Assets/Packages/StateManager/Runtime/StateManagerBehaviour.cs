@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace UnityEssentials.States
@@ -79,16 +80,19 @@ namespace UnityEssentials.States
         // ---- Configuration ------------------------------------------------
 
         /// <summary>
-        /// Registers this machine's states with <see cref="AddState"/>, and optionally picks the
-        /// starting one with <see cref="SetInitialState"/>. Called once by <see cref="Initialize"/>.
+        /// Registers this machine's states with <see cref="AddState"/> — each with the states it may
+        /// move to — and optionally picks the starting one with <see cref="SetInitialState"/>.
+        /// Called once by <see cref="Initialize"/>.
         /// </summary>
         protected abstract void OnInitialize();
 
         /// <summary>
-        /// Declares the legal moves between the states registered by <see cref="OnInitialize"/>.
-        /// Called once by <see cref="Initialize"/>, right after <see cref="OnInitialize"/>.
+        /// Declares moves that <see cref="AddState"/> did not cover — the escape hatches
+        /// <c>AllowAny</c> and late additions. Optional; called once by <see cref="Initialize"/>.
         /// </summary>
-        protected abstract void InsertTransitions(in Transitions<TState> transitions);
+        protected virtual void InsertTransitions(in Transitions<TState> transitions)
+        {
+        }
 
         /// <summary>
         /// Decides which state <see cref="Initialize"/> enters. The default honours
@@ -156,9 +160,12 @@ namespace UnityEssentials.States
         }
 
         /// <summary>Forwards <see cref="IStateManager{TState}.AddState"/>, returning this behaviour so chains keep targeting it.</summary>
-        public IStateManager<TState> AddState(BaseState<TState> state)
+        public IStateManager<TState> AddState(
+            TState stateType,
+            BaseState<TState> state,
+            IReadOnlyList<TState> availableTransitions = null)
         {
-            _machine.AddState(state);
+            _machine.AddState(stateType, state, availableTransitions);
             return this;
         }
 

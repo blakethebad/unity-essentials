@@ -46,8 +46,8 @@ namespace UnityEssentials.States.Tests
             // hook's registrations and fell back to default(TState) would fail here.
             var machine = new HookStateManager(m =>
             {
-                m.AddState(new RecordingState(TestState.B))
-                    .AddState(new RecordingState(TestState.A));
+                m.AddState(TestState.B, new RecordingState())
+                    .AddState(TestState.A, new RecordingState());
             });
 
             machine.Initialize();
@@ -63,9 +63,9 @@ namespace UnityEssentials.States.Tests
         {
             var machine = new HookStateManager(m =>
             {
-                m.AddState(new RecordingState(TestState.A))
-                    .AddState(new RecordingState(TestState.B))
-                    .AddState(new RecordingState(TestState.C))
+                m.AddState(TestState.A, new RecordingState())
+                    .AddState(TestState.B, new RecordingState())
+                    .AddState(TestState.C, new RecordingState())
                     .SetInitialState(TestState.C);
             });
 
@@ -261,7 +261,7 @@ namespace UnityEssentials.States.Tests
         {
             var machine = new HookStateManager(m =>
             {
-                m.AddState(new RecordingState(TestState.A));
+                m.AddState(TestState.A, new RecordingState());
                 m.Initialize();
             });
 
@@ -315,7 +315,7 @@ namespace UnityEssentials.States.Tests
         public void Initialize_ExternalStateRegistration_CombinesWithHookConfiguration()
         {
             var machine = new HookStateManager(
-                m => m.AddState(new RecordingState(TestState.C)),
+                m => m.AddState(TestState.C, new RecordingState()),
                 delegate(in Transitions<TestState> transitions)
                 {
                     // A and B are registered externally, below: a hook declares transitions over
@@ -326,8 +326,8 @@ namespace UnityEssentials.States.Tests
 
             // All external configuration still amounts to: register states, and optionally name the
             // one to start in. Transitions are the hook's alone.
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
 
             machine.Initialize();
@@ -355,15 +355,15 @@ namespace UnityEssentials.States.Tests
 
         private static void AddAb(HookStateManager machine)
         {
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState());
         }
 
         private static void AddAbc(HookStateManager machine)
         {
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState());
         }
     }
 }

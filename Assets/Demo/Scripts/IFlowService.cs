@@ -1,5 +1,6 @@
 public interface IFlowService
 {
-	public void StartLevel();
-	public void QuitLevel();
+	void RestartLastLevel();
+	void StartNextLevel();
+	void QuitLevel();
 }

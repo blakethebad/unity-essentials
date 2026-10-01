@@ -33,7 +33,7 @@ namespace UnityEssentials.States.Tests
         public void Initialize_CalledTwice_ThrowsStateConfigurationException()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.A, new RecordingState());
             machine.Initialize();
 
             Assert.Throws<StateConfigurationException>(() => machine.Initialize());
@@ -50,9 +50,9 @@ namespace UnityEssentials.States.Tests
             // B registers first while A is the enum's default value, so a machine that fell back to
             // default(TState) instead of the first registration would fail here.
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.C));
+            machine.AddState(TestState.B, new RecordingState())
+                .AddState(TestState.A, new RecordingState())
+                .AddState(TestState.C, new RecordingState());
 
             machine.Initialize();
 
@@ -64,9 +64,9 @@ namespace UnityEssentials.States.Tests
         public void Initialize_WithSetInitialState_EntersDeclaredState()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.C);
 
             machine.Initialize();
@@ -79,9 +79,9 @@ namespace UnityEssentials.States.Tests
         public void SetInitialState_CalledTwice_LastCallWins()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.B)
                 .SetInitialState(TestState.C);
 
@@ -100,9 +100,9 @@ namespace UnityEssentials.States.Tests
             // the point: a derived manager decides where it starts, and an override that ignores
             // base wins outright over the configured value rather than being merged with it.
             var machine = new RedirectingStateManager(TestState.C);
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.B);
 
             machine.Initialize();
@@ -118,8 +118,8 @@ namespace UnityEssentials.States.Tests
         public void Initialize_WithNoAllowedTransitions_Succeeds()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState());
 
             Assert.DoesNotThrow(() => machine.Initialize());
 
@@ -136,8 +136,8 @@ namespace UnityEssentials.States.Tests
         public void Initialize_EnterStateReceivesOwnStateType()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.B);
 
             machine.Initialize();
@@ -150,8 +150,8 @@ namespace UnityEssentials.States.Tests
         public void Initialize_FiresStateEnteredWithInitialStateAsBothArguments()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.B);
 
             var entered = 0;
@@ -173,8 +173,8 @@ namespace UnityEssentials.States.Tests
         public void Initialize_DoesNotFireStateExited()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState());
 
             var exited = 0;
             machine.StateExited += (previous, next) =>
@@ -197,7 +197,7 @@ namespace UnityEssentials.States.Tests
         public void Initialize_PreviousStateTypeIsNull()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.A, new RecordingState());
 
             machine.Initialize();
 
@@ -210,8 +210,8 @@ namespace UnityEssentials.States.Tests
         public void Initialize_PreviousStateIsNull()
         {
             var machine = new PlainStateManager();
-            var initial = new RecordingState(TestState.A);
-            machine.AddState(initial);
+            var initial = new RecordingState();
+            machine.AddState(TestState.A, initial);
 
             machine.Initialize();
 
@@ -223,7 +223,7 @@ namespace UnityEssentials.States.Tests
         public void Initialize_SetsIsInitialized()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.A, new RecordingState());
 
             var initializedDuringEntry = false;
             machine.StateEntered += (previous, next) => initializedDuringEntry = machine.IsInitialized;
@@ -245,8 +245,8 @@ namespace UnityEssentials.States.Tests
             Assert.IsFalse(empty.IsInitialized);
 
             var configured = new PlainStateManager((TestState.A, TestState.B));
-            configured.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
+            configured.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
 
             // Fully configured is still not initialized: only Initialize() flips the phase.
@@ -260,8 +260,8 @@ namespace UnityEssentials.States.Tests
             // what comes back below is therefore "the default value", not "the initial state,
             // reported early".
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.B, new RecordingState())
+                .AddState(TestState.A, new RecordingState());
 
             Assert.AreEqual(default(TestState), machine.CurrentStateType);
 
@@ -274,7 +274,7 @@ namespace UnityEssentials.States.Tests
         public void CurrentState_BeforeInitialize_ReturnsNull()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.A, new RecordingState());
 
             // Null is the unambiguous half of the pair: no registered state can be mistaken for it,
             // even when the enum's default is one.
@@ -288,8 +288,8 @@ namespace UnityEssentials.States.Tests
             // missing Initialize() is what rejects the call — and it says so with a configuration
             // exception rather than the InvalidTransitionException an undeclared pair earns.
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState());
 
             Assert.Throws<StateConfigurationException>(() => machine.ChangeState(TestState.B));
             CollectionAssert.IsEmpty(CallLog.Entries);
@@ -299,7 +299,7 @@ namespace UnityEssentials.States.Tests
         public void RestartState_BeforeInitialize_ThrowsStateConfigurationException()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.A, new RecordingState());
 
             Assert.Throws<StateConfigurationException>(() => machine.RestartState());
             CollectionAssert.IsEmpty(CallLog.Entries);
@@ -309,7 +309,7 @@ namespace UnityEssentials.States.Tests
         public void Tick_BeforeInitialize_ThrowsStateConfigurationException()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.A, new RecordingState());
 
             Assert.Throws<StateConfigurationException>(() => machine.Tick());
 
@@ -325,8 +325,8 @@ namespace UnityEssentials.States.Tests
             // The bootstrap pattern: an initial state whose entry hook does its startup work and
             // immediately flows the machine onward.
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new ChangeOnEnterState(TestState.A, TestState.B))
-                .AddState(new RecordingState(TestState.B));
+            machine.AddState(TestState.A, new ChangeOnEnterState(TestState.B))
+                .AddState(TestState.B, new RecordingState());
 
             machine.StateEntered += (from, to) => CallLog.Record($"Entered:{from}:to:{to}");
 

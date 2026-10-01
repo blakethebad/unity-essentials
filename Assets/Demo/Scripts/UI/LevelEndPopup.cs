@@ -61,7 +61,7 @@ public class LevelEndPopup : UIBase
 	{
 		//Right now regardless for win lose lets move on with restarting the level
 		Hide();
-		_gameFlowHandler.StartLevel();
+		_gameFlowHandler.RestartLastLevel();
 	}
 
 	private void OnMainMenuPressed()

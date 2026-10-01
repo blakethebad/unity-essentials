@@ -70,7 +70,7 @@ public class BoardEntity : MonoBehaviour
 		Rigidbody.freezeRotation = false;
 	}
 
-	public void Store()
+	public void SetStored(Vector3 storedPosition, Quaternion storedRotation)
 	{
 		IsStored = true;
 		_collider.enabled = false;

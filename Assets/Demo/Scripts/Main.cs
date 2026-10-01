@@ -6,9 +6,9 @@ using UnityEssentials.UI;
 public class Main : MonoBehaviour
 {
 	//TODO: Move these out later
-	[SerializeField] private Board boardPrefab;
+	[SerializeField] private Board boardPrefab; //TODO: Move to asset management later
 	[SerializeField] private WindowData mainWindowData;
-	[SerializeField] private List<BoardEntity> tempObjectPool;
+	[SerializeField] private List<LevelData> levels; //TODO: Move to asset management later
 
 	private LifetimeStateManager _lifetimeStateManager;
 	private bool _completedInstallation = false;
@@ -33,7 +33,11 @@ public class Main : MonoBehaviour
 		var uiService = new UIService();
 		ServiceLocator.Register(uiService).As<UIService>();
 
-		_lifetimeStateManager = new LifetimeStateManager(boardPrefab, tempObjectPool);
+		var levelRepo = new LevelRepo(levels);
+		ServiceLocator.Register(levelRepo).As<ILevelService>();
+
+		_lifetimeStateManager = new LifetimeStateManager(boardPrefab);
+		ServiceLocator.Register(_lifetimeStateManager).As<IFlowService>();
 
 		uiService.SwitchWindow(mainWindowData);
 		_lifetimeStateManager.Initialize();

@@ -7,8 +7,6 @@ using UnityEssentials.Utilities;
 
 public class GameplayState : BaseState<LifetimeStateManager, LifetimeState>
 {
-    public override LifetimeState StateType => LifetimeState.GameplayState;
-
 	private UIService _uiService;
 	private Timer _levelTimer;
 	private Board _activeBoard;
@@ -28,7 +26,7 @@ public class GameplayState : BaseState<LifetimeStateManager, LifetimeState>
 		});
 
 		_activeBoard = Object.Instantiate(Manager.boardPrefab);
-		_activeBoard.GenerateObjects(Manager.tempObjectPool);
+		_activeBoard.SpawnLevel(Manager.CurrentLevel);
 
 		_levelTimer.Completed += OnTimerCompleted;
 		_levelTimer.Start();
@@ -36,6 +34,7 @@ public class GameplayState : BaseState<LifetimeStateManager, LifetimeState>
 
     protected override void OnExitState(LifetimeState nextState)
     {
+		Object.Destroy(_activeBoard.gameObject);
 		//clear the board here
 		_uiService.HideUI<LevelScreen>();
 		_activeBoard.ClearBoard();

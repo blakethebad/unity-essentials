@@ -24,29 +24,29 @@ namespace UnityEssentials.States.Tests
         {
             var machine = new PlainStateManager();
 
-            Assert.Throws<ArgumentNullException>(() => machine.AddState(null));
+            Assert.Throws<ArgumentNullException>(() => machine.AddState(TestState.A, null));
         }
 
         [Test]
         public void AddState_DuplicateStateType_ThrowsStateConfigurationException()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.A, new RecordingState());
 
             // A different instance under the same key: the collision is on StateType, not identity.
             Assert.Throws<StateConfigurationException>(
-                () => machine.AddState(new RecordingState(TestState.A)));
+                () => machine.AddState(TestState.A, new RecordingState()));
         }
 
         [Test]
         public void AddState_StateAlreadyAttachedToOtherManager_ThrowsStateConfigurationException()
         {
-            var shared = new RecordingState(TestState.A);
+            var shared = new RecordingState();
             var first = new PlainStateManager();
-            first.AddState(shared);
+            first.AddState(TestState.A, shared);
             var second = new PlainStateManager();
 
-            Assert.Throws<StateConfigurationException>(() => second.AddState(shared));
+            Assert.Throws<StateConfigurationException>(() => second.AddState(TestState.A, shared));
 
             // Ownership stayed with the first machine, and the rejected registration did not
             // half-register the state on the second: it has nothing to initialize.
@@ -60,8 +60,8 @@ namespace UnityEssentials.States.Tests
         {
             var machine = new PlainStateManager();
 
-            var afterFirst = machine.AddState(new RecordingState(TestState.A));
-            var afterSecond = afterFirst.AddState(new RecordingState(TestState.B));
+            var afterFirst = machine.AddState(TestState.A, new RecordingState());
+            var afterSecond = afterFirst.AddState(TestState.B, new RecordingState());
 
             Assert.AreSame(machine, afterFirst);
             Assert.AreSame(machine, afterSecond);
@@ -74,7 +74,7 @@ namespace UnityEssentials.States.Tests
         {
             // Only the source is unknown, so a pass cannot be explained by the destination.
             var machine = new HookStateManager(
-                m => m.AddState(new RecordingState(TestState.B)),
+                m => m.AddState(TestState.B, new RecordingState()),
                 delegate(in Transitions<TestState> transitions)
                 {
                     transitions.Allow(TestState.D, TestState.B);
@@ -91,7 +91,7 @@ namespace UnityEssentials.States.Tests
         public void Allow_DuplicatePair_IsIdempotent()
         {
             var machine = new HookStateManager(
-                m => m.AddState(new RecordingState(TestState.A)).AddState(new RecordingState(TestState.B)),
+                m => m.AddState(TestState.A, new RecordingState()).AddState(TestState.B, new RecordingState()),
                 delegate(in Transitions<TestState> transitions)
                 {
                     transitions.Allow(TestState.A, TestState.B)
@@ -112,7 +112,7 @@ namespace UnityEssentials.States.Tests
         {
             // The source is registered so the null array is the only thing left to object to.
             var machine = new HookStateManager(
-                m => m.AddState(new RecordingState(TestState.A)),
+                m => m.AddState(TestState.A, new RecordingState()),
                 delegate(in Transitions<TestState> transitions)
                 {
                     transitions.Allow(TestState.A, (TestState[])null);
@@ -129,7 +129,7 @@ namespace UnityEssentials.States.Tests
             // in both the params form and the explicit empty-array form. A failed hook abandons the
             // whole initialization, so each form needs a machine of its own.
             var paramsForm = new HookStateManager(
-                m => m.AddState(new RecordingState(TestState.A)),
+                m => m.AddState(TestState.A, new RecordingState()),
                 delegate(in Transitions<TestState> transitions)
                 {
                     transitions.Allow(TestState.A);
@@ -139,7 +139,7 @@ namespace UnityEssentials.States.Tests
             StringAssert.Contains("was called without any destination states", thrown.Message);
 
             var arrayForm = new HookStateManager(
-                m => m.AddState(new RecordingState(TestState.A)),
+                m => m.AddState(TestState.A, new RecordingState()),
                 delegate(in Transitions<TestState> transitions)
                 {
                     transitions.Allow(TestState.A, new TestState[0]);
@@ -152,7 +152,7 @@ namespace UnityEssentials.States.Tests
         public void CanChangeState_BeforeInitialize_ReportsAnEmptyTable()
         {
             var machine = new HookStateManager(
-                m => m.AddState(new RecordingState(TestState.A)).AddState(new RecordingState(TestState.B)),
+                m => m.AddState(TestState.A, new RecordingState()).AddState(TestState.B, new RecordingState()),
                 delegate(in Transitions<TestState> transitions)
                 {
                     transitions.Allow(TestState.A, TestState.B);
@@ -181,7 +181,7 @@ namespace UnityEssentials.States.Tests
         public void SetInitialState_UnregisteredState_ThrowsStateConfigurationException()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.A, new RecordingState());
 
             Assert.Throws<StateConfigurationException>(() => machine.SetInitialState(TestState.D));
 
@@ -196,13 +196,13 @@ namespace UnityEssentials.States.Tests
         public void AddState_AfterInitialize_ThrowsStateConfigurationException()
         {
             var machine = CreateInitializedMachine();
-            var late = new RecordingState(TestState.B);
+            var late = new RecordingState();
 
-            Assert.Throws<StateConfigurationException>(() => machine.AddState(late));
+            Assert.Throws<StateConfigurationException>(() => machine.AddState(TestState.B, late));
 
             // The seal is checked before ownership is taken, so the rejected instance is still free
             // to be registered somewhere else.
-            Assert.DoesNotThrow(() => new PlainStateManager().AddState(late));
+            Assert.DoesNotThrow(() => new PlainStateManager().AddState(TestState.B, late));
         }
 
         [Test]
@@ -264,7 +264,7 @@ namespace UnityEssentials.States.Tests
         private static IStateManager<TestState> CreateInitializedMachine()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.A, new RecordingState());
             machine.Initialize();
 
             return machine;
@@ -273,7 +273,7 @@ namespace UnityEssentials.States.Tests
         private IStateManager<TestState> CreateMachineCapturingTransitions()
         {
             var machine = new HookStateManager(
-                m => m.AddState(new RecordingState(TestState.A)),
+                m => m.AddState(TestState.A, new RecordingState()),
                 delegate(in Transitions<TestState> transitions)
                 {
                     _capturedTransitions = transitions;

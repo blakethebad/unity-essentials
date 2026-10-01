@@ -32,9 +32,9 @@ namespace UnityEssentials.States.Tests
                 (TestState.C, TestState.A),
                 (TestState.B, TestState.C));
 
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.A);
 
             machine.Initialize();

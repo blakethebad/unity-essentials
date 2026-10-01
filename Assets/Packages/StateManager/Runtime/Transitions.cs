@@ -3,9 +3,9 @@ using System;
 namespace UnityEssentials.States
 {
     /// <summary>
-    /// The chainable handle a machine hands to its <c>InsertTransitions</c> hook — the only way to
-    /// declare transitions. A thin façade over the manager's internal <c>Allow*</c> methods, which
-    /// keep all the validation.
+    /// The chainable handle a machine hands to its <c>InsertTransitions</c> hook, for the moves
+    /// <c>AddState</c> cannot express. A thin façade over the manager's internal <c>Allow*</c>
+    /// methods, which keep all the validation.
     /// </summary>
     public readonly struct Transitions<TState> where TState : struct, Enum
     {

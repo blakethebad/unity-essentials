@@ -30,7 +30,7 @@ namespace UnityEssentials.States.Tests
         public void Tick_InvokesUpdateStateOnCurrentState()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new RecordingState(TestState.A));
+            machine.AddState(TestState.A, new RecordingState());
             machine.Initialize();
 
             machine.Tick();
@@ -48,8 +48,8 @@ namespace UnityEssentials.States.Tests
         public void Tick_AfterTransition_InvokesUpdateStateOnNewState()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState());
             machine.Initialize();
 
             machine.ChangeState(TestState.B);
@@ -71,7 +71,7 @@ namespace UnityEssentials.States.Tests
         public void Tick_StateWithDefaultUpdateState_Succeeds()
         {
             var machine = new PlainStateManager();
-            machine.AddState(new SilentState(TestState.A));
+            machine.AddState(TestState.A, new SilentState());
             machine.Initialize();
 
             Assert.DoesNotThrow(() => machine.Tick());
@@ -92,8 +92,8 @@ namespace UnityEssentials.States.Tests
         public void ChangeState_FromUpdateState_Succeeds()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new ChangeOnUpdateState(TestState.A, TestState.B))
-                .AddState(new RecordingState(TestState.B));
+            machine.AddState(TestState.A, new ChangeOnUpdateState(TestState.B))
+                .AddState(TestState.B, new RecordingState());
             machine.Initialize();
 
             // The contrast with Tick_CalledFromEnterState is the point: the re-entrancy guard is
@@ -116,8 +116,8 @@ namespace UnityEssentials.States.Tests
         public void Tick_StateChangedDuringUpdateState_DoesNotUpdateNewStateInSameCall()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new ChangeOnUpdateState(TestState.A, TestState.B))
-                .AddState(new RecordingState(TestState.B));
+            machine.AddState(TestState.A, new ChangeOnUpdateState(TestState.B))
+                .AddState(TestState.B, new RecordingState());
             machine.Initialize();
 
             machine.Tick();
@@ -146,8 +146,8 @@ namespace UnityEssentials.States.Tests
         public void Tick_CalledFromEnterState_ThrowsStateManagerException()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new TickOnEnterState(TestState.B));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new TickOnEnterState());
             machine.Initialize();
 
             var exception = Assert.Throws<StateManagerException>(() => machine.ChangeState(TestState.B));

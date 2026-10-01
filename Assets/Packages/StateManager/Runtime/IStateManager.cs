@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace UnityEssentials.States
 {
@@ -57,8 +58,14 @@ namespace UnityEssentials.States
 
         // ---- Configuration ------------------------------------------------
 
-        /// <summary>Registers a state under its own state type. The first one registered is the default initial state.</summary>
-        IStateManager<TState> AddState(BaseState<TState> state);
+        /// <summary>
+        /// Registers a state under <paramref name="stateType"/> and declares the states it may move
+        /// to. The first one registered is the default initial state.
+        /// </summary>
+        IStateManager<TState> AddState(
+            TState stateType,
+            BaseState<TState> state,
+            IReadOnlyList<TState> availableTransitions = null);
 
         /// <summary>Chooses the state <see cref="Initialize"/> enters, overriding the first-registered default.</summary>
         IStateManager<TState> SetInitialState(TState state);

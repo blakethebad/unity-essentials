@@ -5,9 +5,9 @@ namespace UnityEssentials.States
 {
     /// <summary>
     /// A finite state machine keyed by your own enum: a derived manager registers its states in
-    /// <see cref="OnInitialize"/> and declares its legal moves in <see cref="InsertTransitions"/>,
-    /// then <see cref="Initialize"/> seals it and <see cref="ChangeState"/> and <see cref="Tick"/>
-    /// drive it. Plain C# — no Unity types, no scene dependency.
+    /// <see cref="OnInitialize"/>, each with the moves it allows, then <see cref="Initialize"/>
+    /// seals it and <see cref="ChangeState"/> and <see cref="Tick"/> drive it. Plain C# — no Unity
+    /// types, no scene dependency.
     /// </summary>
     public abstract partial class BaseStateManager<TState> : IStateManager<TState> where TState : struct, Enum
     {
@@ -16,6 +16,11 @@ namespace UnityEssentials.States
         private readonly Dictionary<TState, BaseState<TState>> _states = new Dictionary<TState, BaseState<TState>>();
 
         private readonly TransitionTable<TState> _transitions = new TransitionTable<TState>();
+
+        // Pairs declared through AddState, held until every state has been registered: a state may
+        // legally name a destination that OnInitialize has not reached yet, so they cannot be
+        // validated against _states at the moment they are declared.
+        private readonly List<(TState from, TState to)> _declaredTransitions = new List<(TState from, TState to)>();
 
         private TState? _initialState;
         private TState? _firstRegistered;
@@ -121,6 +126,10 @@ namespace UnityEssentials.States
             try
             {
                 OnInitialize();
+
+                // Only now is the state set complete, so this is the first point where the pairs
+                // AddState collected can be checked against it.
+                ApplyDeclaredTransitions();
                 InsertTransitions(new Transitions<TState>(this));
             }
             finally
@@ -240,7 +249,7 @@ namespace UnityEssentials.States
             {
                 throw new InvalidTransitionException(
                     $"Transition from '{from}' to '{nextState}' is not allowed. " +
-                    $"Declare it with transitions.Allow({from}, {nextState}) in InsertTransitions().");
+                    $"Add '{nextState}' to the available transitions of AddState({from}, ...) in OnInitialize().");
             }
 
             _pendingState = nextState;
@@ -283,7 +292,7 @@ namespace UnityEssentials.States
             {
                 throw new InvalidTransitionException(
                     $"Transition from '{from}' to '{nextState}' is not allowed. " +
-                    $"Declare it with transitions.Allow({from}, {nextState}) in InsertTransitions().");
+                    $"Add '{nextState}' to the available transitions of AddState({from}, ...) in OnInitialize().");
             }
 
             // Stage literals are interned, so tracking them costs nothing on the success path;
@@ -403,22 +412,28 @@ namespace UnityEssentials.States
         // ---- Configuration ------------------------------------------------
 
         /// <summary>
-        /// Registers this machine's states with <see cref="AddState"/>, and optionally picks the
-        /// starting one with <see cref="SetInitialState"/>. Called once by <see cref="Initialize"/>.
+        /// Registers this machine's states with <see cref="AddState"/> — each with the states it may
+        /// move to — and optionally picks the starting one with <see cref="SetInitialState"/>.
+        /// Called once by <see cref="Initialize"/>.
         /// </summary>
         protected abstract void OnInitialize();
 
         /// <summary>
-        /// Declares the legal moves between the states registered by <see cref="OnInitialize"/>.
-        /// Called once by <see cref="Initialize"/>, right after <see cref="OnInitialize"/>.
+        /// Declares moves that <see cref="AddState"/> did not cover — the escape hatches
+        /// <c>AllowAny</c> and late additions. Optional; called once by <see cref="Initialize"/>.
         /// </summary>
-        protected abstract void InsertTransitions(in Transitions<TState> transitions);
+        protected virtual void InsertTransitions(in Transitions<TState> transitions)
+        {
+        }
 
         /// <summary>
-        /// Registers a state under its own <see cref="BaseState{TState}.StateType"/> and takes
-        /// ownership of it. The first state registered is the default initial state.
+        /// Registers a state under <paramref name="stateType"/>, takes ownership of it and declares
+        /// the states it may move to. The first state registered is the default initial state.
         /// </summary>
-        public IStateManager<TState> AddState(BaseState<TState> state)
+        public IStateManager<TState> AddState(
+            TState stateType,
+            BaseState<TState> state,
+            IReadOnlyList<TState> availableTransitions = null)
         {
             if (state == null)
             {
@@ -431,23 +446,51 @@ namespace UnityEssentials.States
                     "AddState() cannot be called after Initialize(). Configure the machine completely, then initialize it.");
             }
 
-            var key = state.StateType;
-            if (_states.ContainsKey(key))
+            if (_states.ContainsKey(stateType))
             {
                 throw new StateConfigurationException(
-                    $"A state is already registered for '{key}'. Register one state instance per enum value.");
+                    $"A state is already registered for '{stateType}'. Register one state instance per enum value.");
             }
 
-            // Attach last, so a rejected registration leaves the state unowned and reusable.
-            state.Attach(_attachOwner ?? this);
-            _states.Add(key, state);
+            // Attach before the dictionary, so a rejected registration leaves the state unowned and
+            // reusable rather than half-registered under a key nothing can reach.
+            state.Attach(_attachOwner ?? this, stateType);
+            _states.Add(stateType, state);
 
             if (_firstRegistered == null)
             {
-                _firstRegistered = key;
+                _firstRegistered = stateType;
+            }
+
+            if (availableTransitions != null)
+            {
+                for (var i = 0; i < availableTransitions.Count; i++)
+                {
+                    _declaredTransitions.Add((stateType, availableTransitions[i]));
+                }
             }
 
             return this;
+        }
+
+        // Replays the pairs AddState collected once every state is registered, so each destination
+        // can be checked against the finished set. Failures name the AddState call that declared it.
+        private void ApplyDeclaredTransitions()
+        {
+            for (var i = 0; i < _declaredTransitions.Count; i++)
+            {
+                var (from, to) = _declaredTransitions[i];
+                if (!_states.ContainsKey(to))
+                {
+                    throw new StateConfigurationException(
+                        $"AddState('{from}') lists '{to}' as an available transition, but no state is registered for it. " +
+                        "Register it with AddState() from OnInitialize(), or drop it from the list.");
+                }
+
+                _transitions.Allow(from, to);
+            }
+
+            _declaredTransitions.Clear();
         }
 
         // The three declaration paths behind Transitions<TState>, internal so InsertTransitions is

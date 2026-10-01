@@ -5,7 +5,6 @@ using UnityEssentials.UI;
 
 public class MainMenuState : BaseState<LifetimeStateManager, LifetimeState>
 {
-    public override LifetimeState StateType => LifetimeState.MainMenuState;
 	private UIService _uiService;
 
 	public MainMenuState()

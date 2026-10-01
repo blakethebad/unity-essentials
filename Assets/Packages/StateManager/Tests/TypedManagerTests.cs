@@ -29,21 +29,21 @@ namespace UnityEssentials.States.Tests
         public void AddState_TypedState_SeesTheManagerItWasAddedTo()
         {
             var machine = new PlainStateManager();
-            var state = new PlainManagerState(TestState.A);
+            var state = new PlainManagerState();
 
             // Null beforehand is what makes the reference check below a statement about
             // registration rather than about construction.
             Assert.IsNull(state.ObservedManager);
 
-            machine.AddState(state);
+            machine.AddState(TestState.A, state);
 
             Assert.IsTrue(ReferenceEquals(machine, state.ObservedManager));
             Assert.AreSame(machine, state.ObservedManager);
 
             // Two machines of the same type: the state must report its own, not merely "a machine".
             var other = new PlainStateManager();
-            var otherState = new PlainManagerState(TestState.A);
-            other.AddState(otherState);
+            var otherState = new PlainManagerState();
+            other.AddState(TestState.A, otherState);
 
             Assert.AreSame(other, otherState.ObservedManager);
             Assert.AreNotSame(machine, otherState.ObservedManager);
@@ -56,9 +56,9 @@ namespace UnityEssentials.States.Tests
         public void TypedState_DrivesItsOwnManager()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            var a = new PlainManagerState(TestState.A);
-            machine.AddState(a)
-                .AddState(new RecordingState(TestState.B));
+            var a = new PlainManagerState();
+            machine.AddState(TestState.A, a)
+                .AddState(TestState.B, new RecordingState());
 
             machine.Initialize();
 
@@ -78,9 +78,9 @@ namespace UnityEssentials.States.Tests
         public void AddState_MismatchedManagerType_ThrowsAndLeavesStateUnattached()
         {
             var wrongType = new HookStateManager();
-            var state = new PlainManagerState(TestState.A);
+            var state = new PlainManagerState();
 
-            var thrown = Assert.Throws<StateConfigurationException>(() => wrongType.AddState(state));
+            var thrown = Assert.Throws<StateConfigurationException>(() => wrongType.AddState(TestState.A, state));
 
             StringAssert.Contains(nameof(PlainManagerState), thrown.Message);
             StringAssert.Contains(nameof(PlainStateManager), thrown.Message);
@@ -96,7 +96,7 @@ namespace UnityEssentials.States.Tests
 
             // The same instance, unspoiled by the rejection, on a machine that does match.
             var rightType = new PlainStateManager();
-            rightType.AddState(state);
+            rightType.AddState(TestState.A, state);
 
             Assert.AreSame(rightType, state.ObservedManager);
 
@@ -116,11 +116,11 @@ namespace UnityEssentials.States.Tests
             var machine = new HookStateManager();
 
             Assert.Throws<StateConfigurationException>(
-                () => machine.AddState(new PlainManagerState(TestState.A)));
+                () => machine.AddState(TestState.A, new PlainManagerState()));
 
-            var replacement = new RecordingState(TestState.A);
+            var replacement = new RecordingState();
 
-            Assert.DoesNotThrow(() => machine.AddState(replacement));
+            Assert.DoesNotThrow(() => machine.AddState(TestState.A, replacement));
 
             machine.Initialize();
 
@@ -138,20 +138,20 @@ namespace UnityEssentials.States.Tests
         public void InterfaceTypedState_AttachesToAnyMachineType()
         {
             var plain = new PlainStateManager();
-            var plainState = new AnyManagerState(TestState.A);
-            plain.AddState(plainState);
+            var plainState = new AnyManagerState();
+            plain.AddState(TestState.A, plainState);
 
             var hooked = new HookStateManager();
-            var hookedState = new AnyManagerState(TestState.A);
-            hooked.AddState(hookedState);
+            var hookedState = new AnyManagerState();
+            hooked.AddState(TestState.A, hookedState);
 
             Assert.AreSame(plain, plainState.ObservedManager);
             Assert.AreSame(hooked, hookedState.ObservedManager);
 
             var redirecting = new RedirectingStateManager(TestState.B);
-            var redirectedState = new AnyManagerState(TestState.B);
+            var redirectedState = new AnyManagerState();
 
-            Assert.DoesNotThrow(() => redirecting.AddState(redirectedState));
+            Assert.DoesNotThrow(() => redirecting.AddState(TestState.B, redirectedState));
             Assert.AreSame(redirecting, redirectedState.ObservedManager);
         }
 
@@ -163,12 +163,12 @@ namespace UnityEssentials.States.Tests
         public void InterfaceTypedState_StillBelongsToOneMachine()
         {
             var first = new PlainStateManager();
-            var shared = new AnyManagerState(TestState.A);
-            first.AddState(shared);
+            var shared = new AnyManagerState();
+            first.AddState(TestState.A, shared);
 
             var second = new HookStateManager();
 
-            Assert.Throws<StateConfigurationException>(() => second.AddState(shared));
+            Assert.Throws<StateConfigurationException>(() => second.AddState(TestState.A, shared));
 
             // Ownership stayed with the machine that took it first.
             Assert.AreSame(first, shared.ObservedManager);
@@ -186,8 +186,8 @@ namespace UnityEssentials.States.Tests
         {
             IStateManager<TestState> manager = new PlainStateManager((TestState.A, TestState.B));
 
-            var chained = manager.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
+            var chained = manager.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
 
             // The configuration calls hand the same machine back, so chains keep targeting it.

@@ -150,11 +150,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Main
   boardPrefab: {fileID: 5876297288140308253, guid: 7339c72577429f443bacb1e0791b09cb, type: 3}
   mainWindowData: {fileID: 11400000, guid: b727cd5fc0f21e6469be1d3679e7f10c, type: 2}
-  tempObjectPool:
-  - {fileID: 7818735508888658181, guid: b92f4be9225b22c498ba8a9c309c0e46, type: 3}
-  - {fileID: 1948523123214568221, guid: d9b5f44f14fc1254689c000d9ff95d9f, type: 3}
-  - {fileID: 6495170505274325602, guid: 89e17f4f5375a244baf8dd6e8cd10488, type: 3}
-  - {fileID: 3467464130559457380, guid: b70e6d0acb9bd5b4389270ceefa7fc87, type: 3}
+  levels:
+  - {fileID: 11400000, guid: d49fd0b807dc88d428cdde5e87016aa7, type: 2}
 --- !u!4 &646737111
 Transform:
   m_ObjectHideFlags: 0
