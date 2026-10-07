@@ -262,7 +262,7 @@ namespace NvimUnity.Editor
                 if (!_warnedNoInstallation)
                 {
                     _warnedNoInstallation = true;
-                    Debug.LogWarning("[NvimUnity] No Neovim installation configured. Set one in Edit > Preferences > External Tools.");
+                    Debug.LogError("[NvimUnity] No Neovim installation configured. Set one in Edit > Preferences > External Tools.");
                 }
                 return false;
             }
@@ -328,7 +328,8 @@ namespace NvimUnity.Editor
                 }
                 catch (Exception e)
                 {
-                    Debug.LogWarning("[NvimUnity] remote-send failed, falling back to spawn: " + e.Message);
+                    if (NeovimSyncServer.VerboseLog)
+                        Debug.Log("[NvimUnity] remote-send failed, falling back to spawn: " + e.Message);
                 }
             }
 
@@ -456,7 +457,8 @@ namespace NvimUnity.Editor
             }
             catch (Exception e)
             {
-                Debug.LogWarning("[NvimUnity] remote-expr open failed, falling back: " + e.Message);
+                if (NeovimSyncServer.VerboseLog)
+                    Debug.Log("[NvimUnity] remote-expr open failed, falling back: " + e.Message);
             }
             return false;
         }

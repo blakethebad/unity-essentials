@@ -81,7 +81,7 @@ namespace NvimUnity.Editor
         {
             if (_generator == null)
             {
-                Debug.LogWarning("[NvimUnity] generator not initialized; reload the editor and try again.");
+                Debug.LogError("[NvimUnity] generator not initialized; reload the editor and try again.");
                 return;
             }
             _generator.SyncProject();
@@ -342,7 +342,8 @@ namespace NvimUnity.Editor
                         dbgRecover3 = true;
                         break;
                     default:
-                        Debug.LogWarning("[NvimUnity] unknown IPC message: " + msg);
+                        // A verb this package does not know means a newer nvim plugin, not a user error.
+                        VLog("unknown IPC message: " + msg);
                         break;
                 }
             }
@@ -422,8 +423,8 @@ namespace NvimUnity.Editor
                 // anything. Recovery lives in DebuggerRecovery now.
                 if (deprecatedRearm)
                 {
-                    Debug.LogWarning("[NvimUnity] `rearm` is retired and does nothing — use "
-                        + "dbgstatus to probe the debugger agent and dbgrecover1/dbgrecover2/dbgrecover3 to recover it.");
+                    VLog("`rearm` is retired and does nothing — use dbgstatus to probe the "
+                        + "debugger agent and dbgrecover1/dbgrecover2/dbgrecover3 to recover it.");
                 }
 
                 // Debugger recovery (DebuggerRecovery.cs). Each call catches its own errors and
@@ -435,7 +436,7 @@ namespace NvimUnity.Editor
             }
             catch (Exception ex)
             {
-                Debug.LogWarning("[NvimUnity] drain failed: " + ex.Message);
+                Debug.LogError("[NvimUnity] drain failed: " + ex.Message);
             }
         }
 
@@ -443,7 +444,7 @@ namespace NvimUnity.Editor
         {
             if (_loggedFirstError) return;
             _loggedFirstError = true;
-            Debug.LogWarning("[NvimUnity] sync server: " + msg + " (further errors suppressed)");
+            Debug.LogError("[NvimUnity] sync server: " + msg + " (further errors suppressed)");
         }
 
         // Unity's Mono debugger listens on 127.0.0.1:(56000 + pid % 1000). Undocumented but
