@@ -109,14 +109,6 @@ namespace NvimUnity.Editor
                     ResponseFileCache.Add(key, cachedResponse);
                 }
 
-                // Verbose-only: the compiler reports the same .rsp problems itself, and this
-                // loop runs on every regeneration.
-                if (NeovimSyncServer.VerboseLog)
-                {
-                    foreach (var error in cachedResponse.Errors)
-                        Debug.Log($"[NvimUnity] {response} Parse Error : {error}");
-                }
-
                 data.Add(cachedResponse);
             }
             return data;

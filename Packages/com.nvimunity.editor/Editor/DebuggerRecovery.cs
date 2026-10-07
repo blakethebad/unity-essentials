@@ -8,13 +8,12 @@ using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using Debug = UnityEngine.Debug;
 
 namespace NvimUnity.Editor
 {
     // Unity's Mono debugger agent can wedge: after a messy client detach it stops answering the
     // handshake, so later attaches bind no breakpoints. dbgstatus classifies the agent and
-    // dbgrecover1/2/3 fix it; both report to the console and Library/NvimUnity/dbg-status.txt.
+    // dbgrecover1/2/3 fix it; both report to Library/NvimUnity/dbg-status.txt.
     internal static class DebuggerRecovery
     {
         private const string StatusFileName = "dbg-status.txt";
@@ -25,13 +24,6 @@ namespace NvimUnity.Editor
         private const string Recover2RootKey  = "NvimUnity.DbgRecover2.Root";
         private const string StageSetDebug = "SetDebug"; // after this reload: flip to Debug
         private const string StageProbe    = "Probe";    // after this reload: re-probe + finish
-
-        // Mirrors NeovimSyncServer.VLog gating without depending on its private method.
-        private static void VLog(string msg)
-        {
-            if (!NeovimSyncServer.VerboseLog) return;
-            Debug.Log("[NvimUnity] " + msg);
-        }
 
         // Is the agent armed, wedged, attached, or not listening? Check isAttached first: the
         // agent takes one client, so an attached debugger looks just like a wedge on the wire.
@@ -46,35 +38,31 @@ namespace NvimUnity.Editor
                 bool attached;
                 if (TryGetDebuggerAttached(out attached) && attached)
                 {
-                    WriteAndLogStatus(root, "attached", port);
+                    WriteStatus(root, "attached", port);
                     return;
                 }
 
-                // Nothing attached, so probing is safe. VerboseLog reads EditorPrefs, which is
-                // main thread only, so read it here and pass the value to the probe thread.
-                bool verbose = NeovimSyncServer.VerboseLog;
+                // Nothing attached, so probing is safe.
                 Task.Run(() =>
                 {
                     string status;
-                    try { status = ProbeAgentSocket(port, verbose); }
-                    catch (Exception ex)
+                    try { status = ProbeAgentSocket(port); }
+                    catch (Exception)
                     {
-                        Debug.LogWarning("[NvimUnity] dbgstatus: probe thread failed: " + ex.Message);
                         status = "error";
                     }
-                    WriteAndLogStatus(root, status, port);
+                    WriteStatus(root, status, port);
                 });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.LogWarning("[NvimUnity] dbgstatus failed: " + ex.Message);
             }
         }
 
         // Background thread. No connection means "no-listener", a connection with no handshake
         // means "wedged", a full handshake means "armed" — and finishing the handshake is a
         // clean detach, so a successful probe leaves the agent ready for the next attach.
-        private static string ProbeAgentSocket(int port, bool verbose)
+        private static string ProbeAgentSocket(int port)
         {
             TcpClient client = null;
             try
@@ -83,10 +71,7 @@ namespace NvimUnity.Editor
                 // .NET 4.7.1: no connect-timeout overload; BeginConnect + WaitOne is the idiom.
                 var ar = client.BeginConnect(IPAddress.Loopback, port, null, null);
                 if (!ar.AsyncWaitHandle.WaitOne(1000))
-                {
-                    if (verbose) Debug.Log("[NvimUnity] dbgstatus: connect timed out -> no-listener");
                     return "no-listener";
-                }
                 try
                 {
                     client.EndConnect(ar);
@@ -94,7 +79,6 @@ namespace NvimUnity.Editor
                 catch (SocketException)
                 {
                     // Connection refused (nothing listening on the port).
-                    if (verbose) Debug.Log("[NvimUnity] dbgstatus: connect refused -> no-listener");
                     return "no-listener";
                 }
 
@@ -119,10 +103,7 @@ namespace NvimUnity.Editor
                 }
 
                 if (read < handshake.Length)
-                {
-                    if (verbose) Debug.Log("[NvimUnity] dbgstatus: connected but no handshake (" + read + "/13 bytes) -> wedged");
                     return "wedged";
-                }
 
                 // Echo the handshake, then VM_DISPOSE: the clean detach that re-arms the agent.
                 stream.Write(handshake, 0, handshake.Length);
@@ -130,7 +111,6 @@ namespace NvimUnity.Editor
                 byte[] dispose = BuildVmDispose();
                 stream.Write(dispose, 0, dispose.Length);
                 stream.Flush();
-                if (verbose) Debug.Log("[NvimUnity] dbgstatus: handshake ok, sent VM_DISPOSE -> armed");
                 return "armed";
             }
             catch (SocketException)
@@ -156,9 +136,9 @@ namespace NvimUnity.Editor
             };
         }
 
-        // Writes one line of status JSON to Library/NvimUnity/dbg-status.txt and logs it.
-        // Safe from the probe thread: both file writes and Debug.Log are.
-        private static void WriteAndLogStatus(string root, string status, int port)
+        // Writes one line of status JSON to Library/NvimUnity/dbg-status.txt, which nvim reads.
+        // Safe from the probe thread: file writes are.
+        private static void WriteStatus(string root, string status, int port)
         {
             string iso = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
             string json = "{\"status\":\"" + status + "\",\"checked_at\":\"" + iso + "\",\"port\":" + port + "}";
@@ -168,11 +148,9 @@ namespace NvimUnity.Editor
                 Directory.CreateDirectory(dir);
                 File.WriteAllText(Path.Combine(dir, StatusFileName), json);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.LogWarning("[NvimUnity] dbgstatus: could not write status file: " + ex.Message);
             }
-            Debug.Log("[NvimUnity] dbgstatus: " + json);
         }
 
         // Cheapest fix: Disconnect() should stop the debugger thread and let the agent
@@ -182,41 +160,21 @@ namespace NvimUnity.Editor
         {
             try
             {
-                bool before;
-                bool haveBefore = TryGetDebuggerAttached(out before);
-                Debug.Log("[NvimUnity] dbgrecover1: calling ManagedDebugger.Disconnect() (isAttached before="
-                    + (haveBefore ? before.ToString() : "unknown") + ")");
-
                 var t = ResolveManagedDebuggerType();
-                if (t == null)
-                {
-                    Debug.LogWarning("[NvimUnity] dbgrecover1: ManagedDebugger type not found; cannot Disconnect()");
-                }
-                else
+                if (t != null)
                 {
                     var mi = t.GetMethod("Disconnect",
                         BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
                         null, Type.EmptyTypes, null);
-                    if (mi == null)
-                    {
-                        Debug.LogWarning("[NvimUnity] dbgrecover1: ManagedDebugger.Disconnect() not found (API surface differs)");
-                    }
-                    else
-                    {
+                    if (mi != null)
                         mi.Invoke(null, null);
-                        bool after;
-                        bool haveAfter = TryGetDebuggerAttached(out after);
-                        Debug.Log("[NvimUnity] dbgrecover1: Disconnect() returned (isAttached after="
-                            + (haveAfter ? after.ToString() : "unknown") + ")");
-                    }
                 }
 
                 // Re-probe ~1s later so the result reflects the post-Disconnect state.
                 ScheduleMainThread(1.0, () => RunStatusProbe(root));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.LogWarning("[NvimUnity] dbgrecover1 failed: " + ex.Message);
             }
         }
 
@@ -232,20 +190,17 @@ namespace NvimUnity.Editor
 
                 if (current == CodeOptimization.Release)
                 {
-                    Debug.Log("[NvimUnity] dbgrecover2: codeOptimization already Release — single flip Release->Debug (1 recompile)");
                     SessionState.SetString(Recover2StageKey, StageProbe);
-                    SetCodeOptimization(CodeOptimization.Debug, "rung 2 (single flip): Debug");
+                    SetCodeOptimization(CodeOptimization.Debug);
                 }
                 else
                 {
-                    Debug.Log("[NvimUnity] dbgrecover2: double-flip Debug->Release->Debug (2 recompiles, survives domain reloads)");
                     SessionState.SetString(Recover2StageKey, StageSetDebug);
-                    SetCodeOptimization(CodeOptimization.Release, "rung 2 (1/2): Release");
+                    SetCodeOptimization(CodeOptimization.Release);
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.LogWarning("[NvimUnity] dbgrecover2 failed: " + ex.Message);
             }
         }
 
@@ -258,7 +213,6 @@ namespace NvimUnity.Editor
             if (string.IsNullOrEmpty(stage)) return;
 
             string root = SessionState.GetString(Recover2RootKey, string.Empty);
-            Debug.Log("[NvimUnity] dbgrecover2 continuation: stage=" + stage);
 
             ScheduleMainThread(1.0, () =>
             {
@@ -268,29 +222,26 @@ namespace NvimUnity.Editor
                     {
                         // First reload complete (now in Release); flip back to Debug.
                         SessionState.SetString(Recover2StageKey, StageProbe);
-                        SetCodeOptimization(CodeOptimization.Debug, "rung 2 (2/2 continuation): Debug");
+                        SetCodeOptimization(CodeOptimization.Debug);
                     }
                     else if (stage == StageProbe)
                     {
                         // Final reload complete; clear state and re-probe.
                         SessionState.EraseString(Recover2StageKey);
                         SessionState.EraseString(Recover2RootKey);
-                        Debug.Log("[NvimUnity] dbgrecover2: flips complete; re-probing");
                         RunStatusProbe(root);
                     }
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
-                    Debug.LogWarning("[NvimUnity] dbgrecover2 continuation failed: " + ex.Message);
                     SessionState.EraseString(Recover2StageKey);
                     SessionState.EraseString(Recover2RootKey);
                 }
             });
         }
 
-        private static void SetCodeOptimization(CodeOptimization value, string why)
+        private static void SetCodeOptimization(CodeOptimization value)
         {
-            VLog("dbgrecover2: setting codeOptimization = " + value + " (" + why + ")");
             CompilationPipeline.codeOptimization = value;
         }
 
@@ -301,13 +252,11 @@ namespace NvimUnity.Editor
         {
             try
             {
-                Debug.Log("[NvimUnity] dbgrecover3: saving modified scenes + assets, then restarting the editor…");
-
                 try { EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo(); }
-                catch (Exception ex) { Debug.LogWarning("[NvimUnity] dbgrecover3: scene save failed: " + ex.Message); }
+                catch (Exception) { }
 
                 try { AssetDatabase.SaveAssets(); }
-                catch (Exception ex) { Debug.LogWarning("[NvimUnity] dbgrecover3: asset save failed: " + ex.Message); }
+                catch (Exception) { }
 
                 var mi = typeof(EditorApplication).GetMethod(
                     "RequestCloseAndRelaunchWithCurrentArguments",
@@ -315,7 +264,6 @@ namespace NvimUnity.Editor
                     null, Type.EmptyTypes, null);
                 if (mi != null)
                 {
-                    Debug.Log("[NvimUnity] dbgrecover3: EditorApplication.RequestCloseAndRelaunchWithCurrentArguments()");
                     mi.Invoke(null, null);
                     return;
                 }
@@ -327,13 +275,10 @@ namespace NvimUnity.Editor
                     // Application.dataPath is <root>/Assets (main thread — we are on it here).
                     projectPath = Path.GetDirectoryName(Application.dataPath);
                 }
-                Debug.LogWarning("[NvimUnity] dbgrecover3: relaunch method not found; falling back to EditorApplication.OpenProject(\""
-                    + projectPath + "\")");
                 EditorApplication.OpenProject(projectPath);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.LogWarning("[NvimUnity] dbgrecover3 failed: " + ex.Message);
             }
         }
 
@@ -345,31 +290,24 @@ namespace NvimUnity.Editor
                 ?? Type.GetType("UnityEditor.Scripting.ManagedDebugger");
         }
 
-        // Reads ManagedDebugger.isAttached. Returns false + logs if the API surface differs.
+        // Reads ManagedDebugger.isAttached. Returns false if the API surface differs.
         private static bool TryGetDebuggerAttached(out bool attached)
         {
             attached = false;
             try
             {
                 var t = ResolveManagedDebuggerType();
-                if (t == null)
-                {
-                    VLog("ManagedDebugger type not found; skipping attach check");
-                    return false;
-                }
+                if (t == null) return false;
+
                 var prop = t.GetProperty("isAttached",
                     BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
-                if (prop == null)
-                {
-                    VLog("ManagedDebugger.isAttached not found; skipping attach check");
-                    return false;
-                }
+                if (prop == null) return false;
+
                 attached = (bool)prop.GetValue(null, null);
                 return true;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.LogWarning("[NvimUnity] ManagedDebugger.isAttached probe failed: " + ex.Message);
                 return false;
             }
         }
@@ -384,7 +322,7 @@ namespace NvimUnity.Editor
                 if (EditorApplication.timeSinceStartup < due) return;
                 EditorApplication.update -= cb;
                 try { action(); }
-                catch (Exception ex) { Debug.LogWarning("[NvimUnity] scheduled recovery task failed: " + ex.Message); }
+                catch (Exception) { }
             };
             EditorApplication.update += cb;
         }

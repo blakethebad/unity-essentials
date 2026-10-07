@@ -58,7 +58,6 @@ stay stable instead of churning every sync.
 | Command | Purpose |
 |---|---|
 | **Tools → NvimUnity → Force SyncProject** | Regenerate all project files now |
-| **Tools → NvimUnity → Toggle Verbose Log** | Verbose logging, for diagnosing sync or launch problems |
 
 ---
 

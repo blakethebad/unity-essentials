@@ -24,8 +24,6 @@ namespace NvimUnity.Editor
         private const string ServerPipeStem = "nvim-unity-sync-";
         private const string ClientPipeStem = "nvim-unity-client-";
 
-        private const string LogPrefKey = "NvimUnity.VerboseLog";
-
         private static CancellationTokenSource _cts;
         private static Task _listenerTask;
         private static TcpListener _tcpListener; // non-Windows transport; null on Windows
@@ -38,12 +36,6 @@ namespace NvimUnity.Editor
         private static bool _loggedFirstError;
         private static string _projectRoot;
 
-        public static bool VerboseLog
-        {
-            get { return EditorPrefs.GetBool(LogPrefKey, false); }
-            set { EditorPrefs.SetBool(LogPrefKey, value); }
-        }
-
         // Exposed for NeovimAssetPostprocessor so asset moves/deletes can trigger a regen.
         internal static IGenerator ActiveGenerator => _generator;
         internal static string ProjectRoot => _projectRoot;
@@ -54,26 +46,6 @@ namespace NvimUnity.Editor
         {
             if (generator != null)
                 _generator = generator;
-        }
-
-        private static void VLog(string msg)
-        {
-            if (!VerboseLog) return;
-            Debug.Log("[NvimUnity] " + msg);
-        }
-
-        [MenuItem("Tools/NvimUnity/Toggle Verbose Log")]
-        private static void ToggleVerboseLog()
-        {
-            VerboseLog = !VerboseLog;
-            Debug.Log("[NvimUnity] verbose log " + (VerboseLog ? "ON" : "OFF"));
-        }
-
-        [MenuItem("Tools/NvimUnity/Toggle Verbose Log", true)]
-        private static bool ToggleVerboseLogValidate()
-        {
-            Menu.SetChecked("Tools/NvimUnity/Toggle Verbose Log", VerboseLog);
-            return true;
         }
 
         [MenuItem("Tools/NvimUnity/Force SyncProject")]
@@ -280,7 +252,6 @@ namespace NvimUnity.Editor
 
             bool fullRefresh = false;
             bool doSync = false;
-            bool deprecatedRearm = false; // retired verb; log once per batch (see below)
             bool dbgStatus = false;   // wedge probe
             bool dbgRecover1 = false; // ManagedDebugger.Disconnect()
             bool dbgRecover2 = false; // codeOptimization double-flip
@@ -327,7 +298,6 @@ namespace NvimUnity.Editor
                         break;
                     case "rearm":
                         // Retired, but still accepted so an older nvim degrades gracefully.
-                        deprecatedRearm = true;
                         break;
                     case "dbgstatus":
                         dbgStatus = true;
@@ -343,7 +313,6 @@ namespace NvimUnity.Editor
                         break;
                     default:
                         // A verb this package does not know means a newer nvim plugin, not a user error.
-                        VLog("unknown IPC message: " + msg);
                         break;
                 }
             }
@@ -353,7 +322,6 @@ namespace NvimUnity.Editor
             {
                 if (fullRefresh || (importPaths != null && importPaths.Count > ImportThreshold))
                 {
-                    VLog("DrainQueue: full AssetDatabase.Refresh(ForceSynchronousImport)");
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                 }
                 else if (importPaths != null && importPaths.Count > 0)
@@ -364,7 +332,6 @@ namespace NvimUnity.Editor
                         var abs = Path.Combine(_projectRoot ?? string.Empty, path);
                         if (File.Exists(abs))
                         {
-                            VLog("DrainQueue: ImportAsset " + path);
                             AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceSynchronousImport);
                         }
                         else
@@ -374,20 +341,17 @@ namespace NvimUnity.Editor
                     }
                     if (needFullRefresh)
                     {
-                        VLog("DrainQueue: invalid import path(s) -> full refresh fallback");
                         AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     }
                 }
 
                 if (doSync)
                 {
-                    VLog("DrainQueue: SyncProject");
                     _generator?.SyncProject();
                 }
 
                 if (playState.HasValue)
                 {
-                    VLog("DrainQueue: EditorApplication.isPlaying = " + playState.Value);
                     EditorApplication.isPlaying = playState.Value;
                 }
 
@@ -402,29 +366,13 @@ namespace NvimUnity.Editor
                         // Pausing in edit mode only arms the pause button, which would make the
                         // next play session start paused. A play+pause batch wants exactly that.
                         if (effectivePlaying)
-                        {
-                            VLog("DrainQueue: EditorApplication.isPaused = true");
                             EditorApplication.isPaused = true;
-                        }
-                        else
-                        {
-                            VLog("DrainQueue: pause ignored (editor not in play mode)");
-                        }
                     }
                     else
                     {
                         // Unconditional: also disarms a pause armed while not playing.
-                        VLog("DrainQueue: EditorApplication.isPaused = false");
                         EditorApplication.isPaused = false;
                     }
-                }
-
-                // `rearm` used to toggle a debugger EditorPref that was never confirmed to fix
-                // anything. Recovery lives in DebuggerRecovery now.
-                if (deprecatedRearm)
-                {
-                    VLog("`rearm` is retired and does nothing — use dbgstatus to probe the "
-                        + "debugger agent and dbgrecover1/dbgrecover2/dbgrecover3 to recover it.");
                 }
 
                 // Debugger recovery (DebuggerRecovery.cs). Each call catches its own errors and

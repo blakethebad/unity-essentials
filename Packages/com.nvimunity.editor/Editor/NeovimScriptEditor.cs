@@ -295,8 +295,6 @@ namespace NvimUnity.Editor
 
                 // nvim is alive but busy. Never spawn a second one for the same project: report
                 // handled and let the user retry once it is idle.
-                Debug.LogWarning("[NvimUnity] the advertised nvim did not answer --remote-expr (busy?); " +
-                    "not spawning a duplicate instance. Retry once nvim is idle.");
                 return true;
             }
 
@@ -326,10 +324,8 @@ namespace NvimUnity.Editor
                             return true;
                     }
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
-                    if (NeovimSyncServer.VerboseLog)
-                        Debug.Log("[NvimUnity] remote-send failed, falling back to spawn: " + e.Message);
                 }
             }
 
@@ -374,20 +370,11 @@ namespace NvimUnity.Editor
 
         public void SyncAll()
         {
-            if (NeovimSyncServer.VerboseLog) Debug.Log("[NvimUnity] SyncAll -> SyncProject");
             _projectGeneration.SyncProject();
         }
 
         public void SyncIfNeeded(string[] addedFiles, string[] deletedFiles, string[] movedFiles, string[] movedFromFiles, string[] importedFiles)
         {
-            if (NeovimSyncServer.VerboseLog)
-            {
-                Debug.Log("[NvimUnity] SyncIfNeeded called: added=" + addedFiles.Length +
-                    " deleted=" + deletedFiles.Length + " moved=" + movedFiles.Length +
-                    " movedFrom=" + movedFromFiles.Length + " imported=" + importedFiles.Length +
-                    "\n  addedFiles: " + string.Join(", ", addedFiles) +
-                    "\n  importedFiles: " + string.Join(", ", importedFiles));
-            }
             _projectGeneration.SyncIfNeeded(addedFiles.Union(deletedFiles).Union(movedFiles).Union(movedFromFiles), importedFiles);
         }
 
@@ -455,10 +442,8 @@ namespace NvimUnity.Editor
                         return true;
                 }
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                if (NeovimSyncServer.VerboseLog)
-                    Debug.Log("[NvimUnity] remote-expr open failed, falling back: " + e.Message);
             }
             return false;
         }
