@@ -62,9 +62,13 @@ native call site is confined to one file per platform.
 
 ## Installing
 
-Copy `Assets/Packages/Haptics/` into the target project. That is the whole procedure. The folder
-is self-contained: the runtime code, the iOS bridge source, the build postprocessors, the sample
-and the tests all live inside it, and nothing references anything outside it.
+Unity's Package Manager -> **+** -> *Install package from git URL*:
+
+`https://github.com/blakethebad/unity-essentials.git?path=/Packages/com.unityessentials.haptics#com.unityessentials.haptics@1.0.0`
+
+That is the whole procedure. The package is self-contained: the runtime code, the iOS bridge
+source, the build postprocessors, the sample and the tests all live inside it, and nothing
+references anything outside it.
 
 Then, per platform:
 
