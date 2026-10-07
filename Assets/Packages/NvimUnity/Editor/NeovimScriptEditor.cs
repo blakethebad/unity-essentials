@@ -22,26 +22,21 @@ public class NeovimScriptEditor : IExternalCodeEditor
     private const string PrefLauncherTpl   = "NvimUnity.LauncherTpl";
     private const string PrefClientPipeKey = "NvimUnity.Pipe.";
 
-    // Per-platform spawn-fallback defaults (MACOS_PLAN U4). The mechanism (EditorPrefs +
-    // {nvim}/{pipe}/{file}/{line}/{column} placeholders) is shared; only the defaults branch.
+    // Per-platform launch defaults. Placeholders: {nvim} {pipe} {file} {line} {column}.
 #if UNITY_EDITOR_WIN
     private const string DefaultTerminalExe = "powershell.exe";
     private const string DefaultLauncherTpl =
         "-NoLogo -NoProfile -Command \"& '{nvim}' --listen '{pipe}' '+call cursor({line},{column})' '{file}'\"";
 #elif UNITY_EDITOR_OSX
-    // osascript into Terminal.app — the only mac terminal reachable without extra setup
-    // (`open -na iTerm --args …` has its own quirks; see the Launcher Template tooltip for
-    // iTerm2/kitty examples). Mono on Unix parses Arguments with shell-like quoting rules,
-    // so the template nests: Mono-level "…\"…\"…" → AppleScript string → shell command.
-    // Paths containing spaces/quotes are not survivable in this default; configure a
-    // custom template if needed.
+    // Drives Terminal.app through osascript, the one mac terminal that needs no setup.
+    // Quoting nests three deep: Mono arguments, then AppleScript string, then shell.
+    // Paths with spaces or quotes need a custom template.
     private const string DefaultTerminalExe = "/usr/bin/osascript";
     private const string DefaultLauncherTpl =
         "-e \"tell application \\\"Terminal\\\" to do script \\\"{nvim} --listen {pipe} '+call cursor({line},{column})' {file}\\\"\""
         + " -e \"tell application \\\"Terminal\\\" to activate\"";
 #else
-    // Linux (unverified — MACOS_PLAN §2.3): x-terminal-emulator is the Debian alternatives
-    // shim; adjust in Preferences on other distros.
+    // Linux (untested). x-terminal-emulator is Debian's shim; change it in Preferences.
     private const string DefaultTerminalExe = "x-terminal-emulator";
     private const string DefaultLauncherTpl =
         "-e \"{nvim} --listen {pipe} '+call cursor({line},{column})' {file}\"";
@@ -49,14 +44,12 @@ public class NeovimScriptEditor : IExternalCodeEditor
 
     private static readonly string[] _supportedFileNames = { "nvim.exe", "nvim" };
 
-    //Not readonly: the Preferences "Project Generation" dropdown swaps it live
-    //(SwapGenerator below).
+    //Not readonly: the Preferences dropdown swaps it live (see SwapGenerator).
     private IGenerator _projectGeneration;
     private static NeovimScriptEditor _instance;
     private static bool _warnedNoInstallation;
 
-    //Factory over NvimUnityConfig.GeneratorType — the ONE place a generator is
-    //chosen. Classic stays the default; SDK-style (Roslyn) is opt-in per project.
+    //The one place a generator is chosen. Classic is the default, SDK-style is opt-in.
     internal static IGenerator CreateGenerator(string projectRoot)
     {
         switch (NvimUnityConfig.instance.GeneratorType)
@@ -77,8 +70,7 @@ public class NeovimScriptEditor : IExternalCodeEditor
             _instance = new NeovimScriptEditor(generator);
             CodeEditor.Register(_instance);
 
-            // Listener runs regardless of which editor is selected so the user can use Neovim
-            // for editing while leaving the External Script Editor pointed elsewhere.
+            // Always listen, so Neovim still works with another external editor selected.
             NeovimSyncServer.Start(projectRoot, generator);
 
             if (IsNeovimInstallation(CodeEditor.CurrentEditorInstallation))
@@ -95,10 +87,9 @@ public class NeovimScriptEditor : IExternalCodeEditor
         _projectGeneration = projectGeneration;
     }
 
-    //Rebuild the generator after a Preferences type switch: keep the session's
-    //generation flags, hand the new instance to the sync server (Start can NOT
-    //swap it — it early-returns while the listener runs), regenerate on disk so
-    //the files immediately match the selection.
+    //Rebuild the generator after a Preferences switch, keeping the current flags. The sync
+    //server has to be handed the new instance (Start will not swap it), then files are
+    //regenerated so they match the new selection right away.
     private void SwapGenerator()
     {
         var root = _projectGeneration.ProjectDirectory;
@@ -117,9 +108,8 @@ public class NeovimScriptEditor : IExternalCodeEditor
             if (cached != null && cached.Length > 0)
                 return cached.Select(i => new CodeEditor.Installation { Name = i.Presentation, Path = i.Path }).ToArray();
 
-            // Per-platform candidates (MACOS_PLAN U6). The hardcoded lists are load-bearing
-            // on mac: a Finder/Dock-launched Unity.app gets the launchd-restricted PATH
-            // (/usr/bin:/bin:/usr/sbin:/sbin — no Homebrew), so the PATH scan finds nothing.
+            // Known install locations. Needed on mac: Unity launched from the Dock gets a
+            // stripped PATH with no Homebrew in it, so scanning PATH alone finds nothing.
             var candidates = new List<string>();
 #if UNITY_EDITOR_WIN
             const string exeName = "nvim.exe";
@@ -150,7 +140,7 @@ public class NeovimScriptEditor : IExternalCodeEditor
             {
                 if (!File.Exists(c)) continue;
                 if (found.Any(f => string.Equals(f.Path, c, StringComparison.OrdinalIgnoreCase))) continue;
-                // BuildNumber kept empty for v1 — would require an nvim --version subprocess per candidate.
+                // BuildNumber left empty; filling it would cost an nvim --version call per candidate.
                 found.Add(new NeovimInfo { Path = c, Presentation = "Neovim", BuildNumber = "" });
             }
 
@@ -210,7 +200,7 @@ public class NeovimScriptEditor : IExternalCodeEditor
         var cfg = NvimUnityConfig.instance;
         var newType = (ProjectGeneratorType)EditorGUILayout.EnumPopup(
             new GUIContent("Project Generation",
-                "Classic = legacy-style csproj (VS/Rider shape). SDK-style (Roslyn) = modern <Project Sdk=...> csproj."),
+                "Classic = legacy-style csproj (the pre-SDK MSBuild shape). SDK-style (Roslyn) = modern <Project Sdk=...> csproj."),
             cfg.GeneratorType);
         if (newType != cfg.GeneratorType)
         {
@@ -292,9 +282,8 @@ public class NeovimScriptEditor : IExternalCodeEditor
             PrefClientPipeKey + projectRoot,
             NeovimSyncServer.DefaultClientPipeNameFor(projectRoot));
 
-        // 0) Preferred: reverse channel via nvim-server.txt + --remote-expr into a first-party
-        //    lua entry point. Works for any nvim (even one started manually), is mode-safe, and
-        //    lets nvim bring its own terminal to the foreground.
+        // 0) Preferred: ask the running nvim (address from nvim-server.txt) to open the file
+        //    itself. Works even for an nvim the user started by hand.
         var serverAddr  = ReadServerAddress(projectRoot);
         var serverAlive = !string.IsNullOrEmpty(serverAddr) && IsServerReachable(serverAddr);
         if (serverAlive)
@@ -302,17 +291,15 @@ public class NeovimScriptEditor : IExternalCodeEditor
             if (TryRemoteExprOpen(nvimExe, serverAddr, fileForArg, line, cursorCol))
                 return true;
 
-            // A live nvim is advertised but couldn't service --remote-expr right now (busy on a
-            // blocking/synchronous op, or the expr errored). Do NOT fall through to spawn a second
-            // nvim on a project that already has one open. Report handled; the user can retry the
-            // double-click once nvim is idle.
+            // nvim is alive but busy. Never spawn a second one for the same project: report
+            // handled and let the user retry once it is idle.
             Debug.LogWarning("[NvimUnity] the advertised nvim did not answer --remote-expr (busy?); " +
                 "not spawning a duplicate instance. Retry once nvim is idle.");
             return true;
         }
 
-        // 1) Fallback (only when no live advertised server): legacy per-project client pipe that
-        //    Unity itself told nvim to --listen on, driven by --remote-send.
+        // 1) Fallback: the per-project pipe Unity told nvim to --listen on, driven by
+        //    --remote-send.
         if (!serverAlive && IsServerReachable(clientPipe))
         {
             var keys = new StringBuilder();
@@ -368,8 +355,7 @@ public class NeovimScriptEditor : IExternalCodeEditor
 #if UNITY_EDITOR_WIN
             spawnPsi.UseShellExecute = true;  // today's verified Windows behavior
 #else
-            // Mono on Unix has no real ShellExecute; run the launcher binary directly so
-            // the Arguments parsing (Unix shell-like rules) is deterministic.
+            // Mono on Unix has no real ShellExecute; run the launcher binary directly.
             spawnPsi.UseShellExecute = false;
 #endif
             Process.Start(spawnPsi);
@@ -416,8 +402,7 @@ public class NeovimScriptEditor : IExternalCodeEditor
         return _supportedFileNames.Contains(name);
     }
 
-    // Reads the nvim server address that nvim's unity.remote module advertised for this project.
-    // One line, verbatim v:servername (e.g. \\.\pipe\nvim.21536.0). Stale-tolerant.
+    // Reads the address the running nvim wrote for this project. One line, may be stale.
     private static string ReadServerAddress(string projectRoot)
     {
         try
@@ -437,9 +422,8 @@ public class NeovimScriptEditor : IExternalCodeEditor
         }
     }
 
-    // Launches a throwaway `nvim --server <addr> --remote-expr <EXPR>` client to open the file at
-    // line:col in the already-running nvim. EXPR calls a first-party lua entry point which also
-    // brings nvim's terminal to the foreground. Returns true on a clean exit-0 within 2s.
+    // Runs a throwaway nvim client that tells the running nvim to open the file at line:col
+    // and raise its terminal. True when that client exits cleanly within 2s.
     private static bool TryRemoteExprOpen(string nvimExe, string serverAddr, string fileForArg, int line, int column)
     {
         var expr = BuildRemoteExpr(fileForArg, line, column);
@@ -482,10 +466,8 @@ public class NeovimScriptEditor : IExternalCodeEditor
         return "v:lua.require'unity.remote'.open('" + f + "', " + line + ", " + column + ")";
     }
 
-    // Platform front door for argument quoting (MACOS_PLAN U5): ProcessStartInfo.Arguments
-    // is parsed with CommandLineToArgvW rules on Windows but with Unix shell-like rules by
-    // Mono on mac/linux — one quoting scheme cannot serve both. Used on the PREFERRED
-    // remote-expr path, so it must be right per platform.
+    // Windows and Mono parse ProcessStartInfo.Arguments by different rules, so each platform
+    // needs its own quoting.
     private static void AppendArgument(StringBuilder sb, string arg)
     {
 #if UNITY_EDITOR_WIN
@@ -495,9 +477,7 @@ public class NeovimScriptEditor : IExternalCodeEditor
 #endif
     }
 
-    // Mono on Unix parses ProcessStartInfo.Arguments with shell-like rules
-    // (g_shell_parse_argv lineage): double-quote the argument and backslash-escape
-    // embedded `"` and `\`.
+    // Mono on Unix uses shell-like rules: quote the argument and escape " and \ inside it.
     private static void AppendUnixArgument(StringBuilder sb, string arg)
     {
         if (sb.Length > 0) sb.Append(' ');
@@ -510,10 +490,8 @@ public class NeovimScriptEditor : IExternalCodeEditor
         sb.Append('"');
     }
 
-    // Appends a single argument to a Windows command line using the CommandLineToArgvW quoting
-    // rules (quote if it contains whitespace or ", double the run of backslashes preceding a "
-    // or the closing quote). Used instead of ProcessStartInfo.ArgumentList, which is unavailable
-    // in the .NET Framework 4.7.1 API profile Unity targets.
+    // Windows rules: quote when the argument holds whitespace or ", and double any run of
+    // backslashes that butts against a quote. ArgumentList does not exist on .NET 4.7.1.
     private static void AppendWindowsArgument(StringBuilder sb, string arg)
     {
         if (sb.Length > 0) sb.Append(' ');
@@ -553,12 +531,8 @@ public class NeovimScriptEditor : IExternalCodeEditor
         sb.Append('"');
     }
 
-    // Transport-aware reachability probe (MACOS_PLAN U2). The address is self-describing:
-    // `tcp:host:port`, a `/…` unix-socket path (mac nvim's v:servername / client --listen
-    // socket), or a Windows pipe (`\\.\pipe\…` or bare name). Mono's managed pipe stack
-    // must NOT be pointed at a unix path — it maps it to $TMPDIR/CoreFxPipe_<name>
-    // nonsense and always answers false, which silently killed the preferred reverse
-    // channel on mac.
+    // The address says which transport it is: tcp:host:port, a /unix/socket/path, or a
+    // Windows pipe. Never hand a unix path to the pipe probe, it always answers false.
     private static bool IsServerReachable(string addr)
     {
         if (string.IsNullOrEmpty(addr)) return false;
@@ -590,10 +564,8 @@ public class NeovimScriptEditor : IExternalCodeEditor
         }
     }
 
-    // Minimal AF_UNIX endpoint (sockaddr_un serialization) — Mono.Unix isn't referenced by
-    // default in Assets code, and File.Exists is NOT a liveness probe here: unix socket
-    // files LINGER after a crashed nvim (unlike Windows pipes), so only a real connect
-    // distinguishes live from stale. A false here correctly routes to the spawn fallback.
+    // Hand-rolled AF_UNIX endpoint, because Mono.Unix is not referenced here. Only a real
+    // connect proves liveness: socket files linger after nvim crashes.
     private sealed class UnixEndPoint : EndPoint
     {
         private readonly string _path;
@@ -627,7 +599,7 @@ public class NeovimScriptEditor : IExternalCodeEditor
         }
     }
 
-    // Quick reachability probe (Windows). NamedPipeClientStream.Connect(timeout) throws when no server is listening.
+    // Windows probe. Connect(timeout) throws when nothing is listening on the pipe.
     private static bool IsPipeReachable(string pipeName)
     {
         const string prefix = @"\\.\pipe\";

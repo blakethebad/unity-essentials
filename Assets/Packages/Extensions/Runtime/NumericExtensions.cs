@@ -124,12 +124,8 @@ namespace UnityEssentials.Extensions
         private static int FormatToBuffer(double seconds, char[] buffer, bool? hours, bool minutes, int decimals, bool roundUp)
         {
             if (buffer == null)
-            {
                 throw new ArgumentNullException(nameof(buffer));
-            }
 
-            // Formatted into stack space first so a buffer that turns out to be too short is reported
-            // as itself, rather than as an index walking off the end of someone's array.
             Span<char> written = stackalloc char[MaxTimeStringLength];
             var length = Format(seconds, written, hours, minutes, decimals, roundUp);
 
@@ -150,40 +146,29 @@ namespace UnityEssentials.Extensions
         private static int Format(double seconds, Span<char> destination, bool? hours, bool minutes, int decimals, bool roundUp)
         {
             if (double.IsNaN(seconds) || double.IsInfinity(seconds))
-            {
                 throw new ArgumentOutOfRangeException(
                     nameof(seconds),
                     seconds,
                     "A time value must be finite to be formatted as a clock string.");
-            }
 
             if (decimals < 0 || decimals > MaxDecimals)
-            {
                 throw new ArgumentOutOfRangeException(
                     nameof(decimals),
                     decimals,
                     $"A clock string shows between 0 and {MaxDecimals} fractional second digits.");
-            }
 
             if (seconds < 0d)
-            {
                 seconds = 0d;
-            }
 
             var unitsPerSecond = UnitsPerSecond(decimals);
 
-            // Binary floating point carries noise (0.1f widens to 0.100000001490…, 0.1 + 0.2 is
-            // 0.30000000000000004), and rounding up would turn that noise into a whole extra unit.
-            // Trimming well below display precision first means only a genuine fraction rounds up.
             var scaled = Math.Round(seconds * unitsPerSecond, 6);
 
             if (scaled > long.MaxValue)
-            {
                 throw new ArgumentOutOfRangeException(
                     nameof(seconds),
                     seconds,
                     "A time value this large cannot be counted in the units the clock string prints.");
-            }
 
             var units = (long)(roundUp ? Math.Ceiling(scaled) : Math.Floor(scaled));
             var totalSeconds = units / unitsPerSecond;
@@ -195,8 +180,6 @@ namespace UnityEssentials.Extensions
             {
                 position = WriteNumber(destination, position, totalSeconds, 1);
             }
-            // Resolved from the snapped value so the layout agrees with the digits about to be
-            // printed: 3599.6 s rounded up is a full hour, and must not print as 60:00.
             else if (hours ?? (totalSeconds >= SecondsPerHour))
             {
                 position = WriteNumber(destination, position, totalSeconds / SecondsPerHour, 1);
@@ -207,7 +190,6 @@ namespace UnityEssentials.Extensions
             }
             else
             {
-                // Without an hours field the hours roll into the minutes rather than being dropped.
                 position = WriteNumber(destination, position, totalSeconds / SecondsPerMinute, 1);
                 destination[position++] = ':';
                 position = WriteNumber(destination, position, totalSeconds % SecondsPerMinute, 2);
@@ -222,21 +204,14 @@ namespace UnityEssentials.Extensions
             return position;
         }
 
-        // Digits are written by hand rather than through ToString or string.Format: those box their
-        // arguments and allocate temporaries, which is exactly what the buffer overloads exist to
-        // avoid, and they would read the current culture for digits that are always ASCII here.
         private static int WriteNumber(Span<char> destination, int position, long value, int minimumDigits)
         {
             var digits = 1;
             for (var remaining = value / 10; remaining > 0; remaining /= 10)
-            {
                 digits++;
-            }
 
             if (digits < minimumDigits)
-            {
                 digits = minimumDigits;
-            }
 
             for (var index = digits - 1; index >= 0; index--)
             {

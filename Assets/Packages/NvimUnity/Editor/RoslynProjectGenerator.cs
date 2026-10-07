@@ -7,35 +7,16 @@ using System.Text;
 using NvimUnity;
 using UnityEditor;
 
-// SDK-style csproj generation for the Roslyn language server era. Inherits ALL
-// of ClassicProjectGenerator's machinery (assembly collection, response files,
-// additional assets, sln emission, change detection) and overrides ONLY the
-// per-project file content — the single virtual seam.
-//
-// NOTE the Roslyn LS loads the classic output fine too (verified 2026-07-11);
-// this generator is the cleaner/faster-evaluating variant, selected via
-// Preferences > External Tools > Project Generation (NvimUnityConfig).
-//
-// Load-bearing property set (why these exact properties):
-//   EnableDefaultItems=false            — Unity owns the file set; explicit
-//                                         <Compile Include> only (also keeps the
-//                                         nvim-side offline csproj patcher working)
-//   DisableImplicitFrameworkReferences  — Unity supplies the FULL reference
-//   + NoStdLib + NoConfig                 closure (BCL included) as absolute
-//                                         HintPaths, so no targeting pack /
-//                                         NuGet restore is ever needed
-//   LangVersion pinned                  — never "latest": the SDK's csc is years
-//                                         ahead of Unity's compiler
+// SDK-style csproj generation. Inherits everything from ClassicProjectGenerator and
+// overrides only the per-project file content. Unity hands us the full reference set as
+// absolute HintPaths, which is why the implicit-reference properties below are all off.
 public class RoslynProjectGenerator : ClassicProjectGenerator
 {
     public RoslynProjectGenerator(string projectDirectory) : base(projectDirectory)
     {
     }
 
-    // Empty/"auto" config => map from the assembly's API compatibility level.
-    // net471 mirrors classic's TargetFrameworkVersion v4.7.1; the NET_Standard
-    // profile is netstandard2.1 since Unity 2021.2 (the enum member kept its
-    // historical _2_0 name).
+    // Empty or "auto" config: take the framework from the assembly's API compatibility level.
     private static string ResolveTargetFramework(ProjectPart assembly)
     {
         var cfg = NvimUnityConfig.instance.TargetFramework;
@@ -48,8 +29,7 @@ public class RoslynProjectGenerator : ClassicProjectGenerator
         return "net471";
     }
 
-    // Empty/"latest"/"auto" config => Unity's own (pinned) compiler language
-    // version via the shared GetLangVersion; an explicit config value wins.
+    // Empty, "latest" or "auto" config: use Unity's own compiler language version.
     private string ResolveLangVersion(ILookup<string, string> responseFileArgs, ProjectPart assembly)
     {
         var cfg = NvimUnityConfig.instance.LangVersion;
@@ -151,9 +131,8 @@ public class RoslynProjectGenerator : ClassicProjectGenerator
                 .AppendLine("  </ItemGroup>");
         }
 
-        // Explicit Compile items — same shape (backslash, XML-escaped, project-
-        // relative) as classic, so lua/unity/csproj.lua's offline patcher works
-        // on both generators' output unchanged.
+        // Explicit Compile items, same shape as classic so the nvim-side csproj patcher
+        // works on either generator's output.
         stringBuilder.AppendLine("  <ItemGroup>");
         foreach (var file in assembly.SourceFiles)
         {
