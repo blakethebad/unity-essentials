@@ -1,6 +1,6 @@
 {
   "name": "com.nvimunity.editor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "displayName": "NvimUnity",
   "description": "Neovim external code editor integration: script-editor registration, nvim sync pipe server, classic/SDK csproj generation, debugger wedge recovery.",
   "unity": "2021.3",
