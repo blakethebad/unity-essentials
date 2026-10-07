@@ -15,4 +15,4 @@ Install any of these with Unity's Package Manager -> **+** -> *Install package f
 | **ServiceLocator** | `https://github.com/blakethebad/unity-essentials.git?path=/Packages/com.unityessentials.services#com.unityessentials.services@1.0.0` |
 | **InverseCollider** | `https://github.com/blakethebad/unity-essentials.git?path=/Packages/com.unityessentials.colliders#com.unityessentials.colliders@1.0.0` |
 | **Haptics** | `https://github.com/blakethebad/unity-essentials.git?path=/Packages/com.unityessentials.haptics#com.unityessentials.haptics@1.0.0` |
-| **NvimUnity** | `https://github.com/blakethebad/unity-essentials.git?path=/Packages/com.nvimunity.editor#com.nvimunity.editor@1.0.0` |
+| **NvimUnity** | `https://github.com/blakethebad/unity-essentials.git?path=/Packages/com.nvimunity.editor#com.nvimunity.editor@1.0.1` |
