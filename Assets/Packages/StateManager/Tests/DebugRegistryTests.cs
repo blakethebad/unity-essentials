@@ -9,34 +9,28 @@ namespace UnityEssentials.States.Tests
     /// <summary>
     /// Covers <see cref="StateMachineDebugRegistry"/> and <see cref="StateMachineDebugEntry"/>: what
     /// registration observes, what the entry records, how the history ring behaves at capacity, how
-    /// entries are released — explicitly, by owner destruction and by collection — and that none of
-    /// it perturbs the machine being watched.
+    /// entries are released, and that none of it perturbs the machine being watched.
     /// </summary>
     [TestFixture]
     public class DebugRegistryTests
     {
-        // ---- Fixture plumbing ----------------------------------------------
-
         // Bounds the collection attempt in BareManager_DroppedByUser_IsPrunedAfterCollection: Unity's
-        // Boehm collector is conservative, so a stale stack slot can keep an unreachable object
-        // alive indefinitely and no count can guarantee success.
+        // Boehm collector is conservative, so no count can guarantee success.
         private const int GarbageCollectionAttempts = 8;
 
         // EditMode tests share one scene for the whole run, so leaked hosts would accumulate.
         private readonly List<GameObject> _hosts = new List<GameObject>();
 
-        /// <summary>Empties both pieces of shared static state this fixture reads.</summary>
         [SetUp]
         public void SetUp()
         {
             // The registry is a static singleton every other fixture's Initialize() writes to, and
-            // NUnit orders fixtures arbitrarily: teardown keeps our leftovers out of their way, setup
-            // keeps theirs out of ours.
+            // NUnit orders fixtures arbitrarily: clearing at both ends keeps them out of each other's
+            // way.
             StateMachineDebugRegistry.Clear();
             CallLog.Clear();
         }
 
-        /// <summary>Releases the registry and destroys every host created by the test that just ran.</summary>
         [TearDown]
         public void TearDown()
         {
@@ -54,9 +48,8 @@ namespace UnityEssentials.States.Tests
             _hosts.Clear();
         }
 
-        // Snapshots the registry the way the debug window does: collect, pruning anything dead on the
-        // way past. A fresh list every time, so assertions cannot depend on CollectAlive clearing the
-        // buffer it is handed.
+        // Snapshots the registry the way the debug window does. A fresh list every time, so
+        // assertions cannot depend on CollectAlive clearing the buffer it is handed.
         private static List<StateMachineDebugEntry> AliveEntries()
         {
             var buffer = new List<StateMachineDebugEntry>();
@@ -74,17 +67,15 @@ namespace UnityEssentials.States.Tests
         }
 
         // Silent states because these tests assert on the registry's own history, not on CallLog.
-        // Three of them so the transition-table reads have a closed pair to report as well as an open
-        // one.
         private static BaseStateManager<TestState> CreateInitializedMachine()
         {
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.C));
 
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B))
-                .AddState(new SilentState(TestState.C))
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState())
+                .AddState(TestState.C, new SilentState())
                 .SetInitialState(TestState.A);
 
             machine.Initialize();
@@ -92,8 +83,8 @@ namespace UnityEssentials.States.Tests
             return machine;
         }
 
-        // GetHistory reports newest first — the order the window draws rows in — so this walks the
-        // ring backwards to hand assertions the chronological order they read naturally in.
+        // GetHistory reports newest first, so this walks the ring backwards to hand assertions the
+        // chronological order they read naturally in.
         private static List<string> HistoryOf(StateMachineDebugEntry entry)
         {
             var pairs = new List<string>(entry.HistoryCount);
@@ -107,7 +98,7 @@ namespace UnityEssentials.States.Tests
         }
 
         // The name list is whatever the machine's state dictionary yields, so tests look indices up
-        // rather than assume A is index 0. Hand-rolled because the fixtures here avoid LINQ.
+        // rather than assume A is index 0.
         private static int IndexOf(IReadOnlyList<string> names, string name)
         {
             for (var i = 0; i < names.Count; i++)
@@ -131,18 +122,12 @@ namespace UnityEssentials.States.Tests
             CallLog.Record($"Exited:{from}:to:{to}");
         }
 
-        // ---- Registration --------------------------------------------------
-
-        /// <summary>
-        /// A machine is invisible to the registry until <c>Initialize</c>, then appears exactly once
-        /// and bumps <see cref="StateMachineDebugRegistry.Version"/>.
-        /// </summary>
         [Test]
         public void Initialize_RegistersMachineExactlyOnce_AndBumpsVersion()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B));
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState());
 
             CollectionAssert.IsEmpty(AliveEntries(), "A configured but uninitialized machine must not be registered.");
 
@@ -156,16 +141,10 @@ namespace UnityEssentials.States.Tests
                 StateMachineDebugRegistry.Version,
                 "Registration must bump Version so the window knows to rebuild.");
 
-            // The entry points at this machine and not at some other one: the source interface is
-            // implemented by the machine itself, so reference equality is the whole check.
             Assert.IsTrue(entry.TryGetMachine(out var source));
             Assert.AreSame(machine, source);
         }
 
-        /// <summary>
-        /// A bare manager's entry carries enough to draw a card without an owning object: the enum
-        /// type, no owner, and a display name synthesised from the closed generic.
-        /// </summary>
         [Test]
         public void Entry_ForBareManager_ExposesEnumTypeAndFallbackDisplayName()
         {
@@ -177,8 +156,7 @@ namespace UnityEssentials.States.Tests
             Assert.IsFalse(entry.HasOwner, "A machine constructed outside a behaviour has no Unity owner.");
             Assert.IsNull(entry.Owner);
 
-            // Asserted literally because it is what the window shows for machines created in plain
-            // C# — the case with no UnityEngine.Object to ping and no GameObject name to borrow.
+            // Asserted literally because it is what the window shows for machines created in plain C#.
             Assert.AreEqual("BaseStateManager<TestState>", entry.DisplayName);
 
             // Keeps the machine reachable to the end of the test: a collected machine would make the
@@ -186,12 +164,6 @@ namespace UnityEssentials.States.Tests
             Assert.IsTrue(machine.IsInitialized);
         }
 
-        // ---- History -------------------------------------------------------
-
-        /// <summary>
-        /// The initial entry is recorded as <c>(initial, initial)</c> and stamps the current-state
-        /// clock, so a machine that has never transitioned still shows one history row.
-        /// </summary>
         [Test]
         public void Initialize_RecordsInitialEntryInHistory_AndStampsCurrentStateEnteredAt()
         {
@@ -200,16 +172,12 @@ namespace UnityEssentials.States.Tests
             var entry = SingleEntry();
 
             // Only works because registration happens before the initial entry runs: ordering it one
-            // line later would pass every other test in this fixture and fail this one.
+            // line later would pass every other test here and fail this one.
             CollectionAssert.AreEqual(new[] { "A>A" }, HistoryOf(entry));
             Assert.Greater(entry.CurrentStateEnteredAt, 0d, "The initial entry must stamp the current-state clock.");
             Assert.AreEqual(TestState.A, machine.CurrentStateType);
         }
 
-        /// <summary>
-        /// Every transition appends one row in chronological order with non-decreasing timestamps,
-        /// and resets the current-state clock.
-        /// </summary>
         [Test]
         public void ChangeState_AppendsHistoryInOrder_AndUpdatesCurrentStateEnteredAt()
         {
@@ -222,9 +190,8 @@ namespace UnityEssentials.States.Tests
 
             CollectionAssert.AreEqual(new[] { "A>A", "A>B", "B>C" }, HistoryOf(entry));
 
-            // GetHistory reports newest first, so walking the indices up must never move forward in
-            // time. Compared with LessOrEqual because two transitions in one test body can
-            // legitimately land on the same clock reading.
+            // LessOrEqual because two transitions in one test body can legitimately land on the same
+            // clock reading.
             var newerTimestamp = double.PositiveInfinity;
             for (var i = 0; i < entry.HistoryCount; i++)
             {
@@ -239,10 +206,6 @@ namespace UnityEssentials.States.Tests
             Assert.GreaterOrEqual(entry.CurrentStateEnteredAt, entry.GetHistory(0).Timestamp);
         }
 
-        /// <summary>
-        /// History is a ring: past <see cref="StateMachineDebugEntry.HistoryCapacity"/> rows, each new
-        /// transition drops the oldest rather than growing the buffer or refusing the row.
-        /// </summary>
         [Test]
         public void History_BeyondCapacity_KeepsMostRecentAndDropsOldest()
         {
@@ -250,15 +213,15 @@ namespace UnityEssentials.States.Tests
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A));
 
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B))
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
             var entry = SingleEntry();
 
             // Mirror what the entry should be recording, so the expectation is derived rather than
-            // hand-copied: the initial entry, then a strict A/B alternation comfortably past the cap.
+            // hand-copied.
             var recorded = new List<string> { "A>A" };
             for (var i = 0; i < 15; i++)
             {
@@ -277,12 +240,6 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.AreEqual(expected, HistoryOf(entry));
         }
 
-        // ---- The non-generic bridge ----------------------------------------
-
-        /// <summary>
-        /// <see cref="IStateMachineDebugSource"/> — the string/index view the editor reads a machine
-        /// through — agrees with the machine underneath it, table included.
-        /// </summary>
         [Test]
         public void DebugSource_ReadsAgreeWithMachine()
         {
@@ -321,12 +278,6 @@ namespace UnityEssentials.States.Tests
             Assert.AreEqual(machine.CurrentStateType.ToString(), source.CurrentStateName);
         }
 
-        // ---- Release -------------------------------------------------------
-
-        /// <summary>
-        /// <see cref="StateMachineDebugRegistry.Unregister"/> removes the entry for the machine it was
-        /// handed and leaves every other one standing; an unknown object is a no-op.
-        /// </summary>
         [Test]
         public void Unregister_RemovesOnlyMatchingMachine_AndIgnoresUnknown()
         {
@@ -351,16 +302,11 @@ namespace UnityEssentials.States.Tests
             Assert.AreSame(second, source, "Unregister removed the wrong entry.");
         }
 
-        /// <summary>
-        /// <see cref="StateMachineDebugRegistry.ResetStatics"/> returns the registry to its
-        /// just-loaded state: no entries, ids counting from the start, and a version bump.
-        /// </summary>
         [Test]
         public void ResetStatics_EmptiesEntriesResetsIdsAndBumpsVersion()
         {
-            // Normalize the id counter before capturing the reference value: every earlier test in
-            // the run advanced it, and [SetUp]'s Clear() deliberately leaves it alone — only a reset
-            // rewinds it. Without this, firstId depends on how many machines the run registered.
+            // Normalize the id counter first: every earlier test in the run advanced it, and
+            // [SetUp]'s Clear() deliberately leaves it alone — only a reset rewinds it.
             StateMachineDebugRegistry.ResetStatics();
 
             var first = CreateInitializedMachine();
@@ -381,25 +327,18 @@ namespace UnityEssentials.States.Tests
             first.ChangeState(TestState.B);
             CollectionAssert.IsEmpty(AliveEntries());
 
-            // Held in a local for the same reason as elsewhere in this fixture: the registry's
-            // reference is weak, so a discarded machine's entry could legitimately vanish.
+            // Held in a local because the registry's reference is weak.
             var afterReset = CreateInitializedMachine();
             Assert.AreEqual(firstId, SingleEntry().Id, "Ids must restart from the beginning after a reset.");
             Assert.IsTrue(afterReset.IsInitialized);
         }
 
-        // ---- Non-interference ----------------------------------------------
-
-        /// <summary>
-        /// With the registry attached, a transition still produces exactly the documented sequence of
-        /// hooks and events — no extra raises, no reordering, nothing swallowed.
-        /// </summary>
         [Test]
         public void Registration_DoesNotPerturbUserEventOrdering()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -408,7 +347,6 @@ namespace UnityEssentials.States.Tests
             // truncated.
             var entry = SingleEntry();
 
-            // Drop the initial entry's hook so the assertion below is the transition and nothing else.
             CallLog.Clear();
 
             machine.StateExited += RecordExited;
@@ -433,12 +371,6 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.AreEqual(new[] { "A>A", "A>B" }, HistoryOf(entry));
         }
 
-        // ---- Owned machines ------------------------------------------------
-
-        /// <summary>
-        /// A hosted machine registers with its behaviour as owner — giving the card a real name and a
-        /// pingable object — and its entry disappears once the host GameObject is destroyed.
-        /// </summary>
         [Test]
         public void Behaviour_RegistersWithOwner_AndEntryDisappearsWhenDestroyed()
         {
@@ -461,14 +393,14 @@ namespace UnityEssentials.States.Tests
 
             CollectionAssert.IsEmpty(AliveEntries(), "A destroyed host must leave no card behind.");
 
-            // The fake-null path on its own — the one that covers subclasses overriding OnDestroy
-            // without calling base: this machine is still strongly referenced by the test, and
-            // nothing unregisters it, so only its destroyed owner can make the entry dead.
+            // The fake-null path on its own — the one covering subclasses that override OnDestroy
+            // without calling base: this machine is still strongly referenced and nothing
+            // unregisters it, so only its destroyed owner can make the entry dead.
             var orphanOwner = new GameObject("orphaned owner");
             _hosts.Add(orphanOwner);
 
             var orphanedMachine = new PlainStateManager();
-            orphanedMachine.AddState(new SilentState(TestState.A));
+            orphanedMachine.AddState(TestState.A, new SilentState());
             StateMachineDebugRegistry.Register(orphanedMachine, orphanOwner);
 
             Assert.AreEqual(1, AliveEntries().Count);
@@ -479,12 +411,6 @@ namespace UnityEssentials.States.Tests
             Assert.IsNotNull(orphanedMachine);
         }
 
-        // ---- Bare machines -------------------------------------------------
-
-        /// <summary>
-        /// A bare manager nobody holds a reference to any more is collectible — the registry's
-        /// reference to it is weak — and its entry is pruned on the next collection pass.
-        /// </summary>
         [Test]
         public void BareManager_DroppedByUser_IsPrunedAfterCollection()
         {
@@ -499,8 +425,8 @@ namespace UnityEssentials.States.Tests
                 GC.Collect();
             }
 
-            // Best-effort by design: a lingering entry is a cosmetic problem in a debug window, and
-            // the deterministic half of the contract is covered by the behaviour-lifecycle test.
+            // Best-effort by design: a lingering entry is cosmetic, and the deterministic half of
+            // the contract is covered by the behaviour-lifecycle test.
             if (weakMachine.IsAlive)
             {
                 Assert.Ignore(
@@ -510,8 +436,8 @@ namespace UnityEssentials.States.Tests
                     "deterministic release is covered by the behaviour-lifecycle test.");
             }
 
-            // The assertion worth having: an entry that outlived a collected machine would mean the
-            // registry holds a strong reference and leaks every machine the game ever created.
+            // An entry that outlived a collected machine would mean the registry holds a strong
+            // reference and leaks every machine the game ever created.
             CollectionAssert.IsEmpty(
                 AliveEntries(),
                 "The registry holds machines weakly, so a collected machine's entry must be pruned.");
@@ -524,8 +450,8 @@ namespace UnityEssentials.States.Tests
         private static WeakReference CreateAndAbandonMachine()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new SilentState(TestState.A))
-                .AddState(new SilentState(TestState.B))
+            machine.AddState(TestState.A, new SilentState())
+                .AddState(TestState.B, new SilentState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 

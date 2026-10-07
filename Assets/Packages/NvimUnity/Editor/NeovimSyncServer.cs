@@ -15,13 +15,9 @@ using Debug = UnityEngine.Debug;
 
 namespace NvimUnity.Editor
 {
-    // Hosts a per-project IPC server so Neovim (via lua autocmds) can ask Unity to
-    // refresh the AssetDatabase or regenerate projects after .cs file events on disk.
-    // Transport is platform-branched (MACOS_PLAN §2.2 in the nvim config repo):
-    // Windows keeps the named pipe (byte-identical wire + advertise format); mac/linux
-    // listen on TCP loopback (managed named pipes are researched-unreliable in Unity's
-    // Mono there) and advertise the self-describing `tcp:127.0.0.1:<port>` form in
-    // sync-pipe.txt, which the nvim side parses to pick its transport.
+    // Per-project IPC server: Neovim sends one-line commands asking Unity to refresh assets,
+    // regenerate projects or drive play mode. Windows uses a named pipe, mac and linux a TCP
+    // loopback port; either way the address is written to sync-pipe.txt for nvim to read.
     internal static class NeovimSyncServer
     {
         private const string PipePrefix = @"\\.\pipe\";
@@ -34,11 +30,8 @@ namespace NvimUnity.Editor
         private static Task _listenerTask;
         private static TcpListener _tcpListener; // non-Windows transport; null on Windows
         private static readonly ConcurrentQueue<string> _queue = new ConcurrentQueue<string>();
-        // Live per-connection readers (NamedPipeServerStream or TcpClient). Tracked so
-        // Shutdown (fires on every beforeAssemblyReload / recompile) can dispose them
-        // and break any persistent nvim connection deterministically, instead of
-        // orphaning it across the domain reload while the new domain arms a fresh,
-        // unconnected listener instance.
+        // Open connections, tracked so Shutdown can dispose them on every domain reload
+        // instead of leaving nvim writing into an orphaned listener.
         private static readonly ConcurrentDictionary<IDisposable, byte> _connections =
             new ConcurrentDictionary<IDisposable, byte>();
         private static IGenerator _generator;
@@ -55,10 +48,8 @@ namespace NvimUnity.Editor
         internal static IGenerator ActiveGenerator => _generator;
         internal static string ProjectRoot => _projectRoot;
 
-        // Swap the generator behind a LIVE listener. Start cannot do this: it
-        // early-returns while the listener task runs, deliberately, so calling it
-        // again never reassigns _generator. Used by the Preferences dropdown
-        // (NeovimScriptEditor.SwapGenerator).
+        // Swaps the generator while the listener is live. Start cannot: it early-returns
+        // once the listener task is running.
         internal static void SetGenerator(IGenerator generator)
         {
             if (generator != null)
@@ -99,14 +90,9 @@ namespace NvimUnity.Editor
         // Idempotent. Safe to call from both the static ctor of NeovimScriptEditor and from Initialize.
         public static void Start(string projectRoot, IGenerator generator)
         {
-            // AssetImportWorker child processes (Unity.exe -batchMode -name AssetImportWorkerN)
-            // run [InitializeOnLoad] editor code too. Without this guard a worker OVERWRITES
-            // editor-pid.txt with ITS pid/debugger-port (nvim then attaches its debugger to the
-            // headless worker — handshake succeeds but user scripts never execute there, so
-            // breakpoints stay NotBound/hollow) and serves a second instance of the SAME-named
-            // sync pipe (play/refresh verbs randomly land in the worker). Verified live
-            // 2026-07-19: editor-pid.txt held AssetImportWorker0's pid. isBatchMode also
-            // correctly keeps the server out of CI/batch runs.
+            // AssetImportWorker child processes run InitializeOnLoad code too. Without this
+            // guard one of them overwrites editor-pid.txt and serves the same pipe, so nvim
+            // ends up talking to a headless worker. Also keeps the server out of CI runs.
             if (Application.isBatchMode) return;
 
             if (_listenerTask != null && !_listenerTask.IsCompleted) return;
@@ -121,8 +107,7 @@ namespace NvimUnity.Editor
             _loggedFirstError = false;
             var token = _cts.Token;
 
-            // Platform-branched transport (see the class header). The listener is armed
-            // BEFORE the advertise write so the advertised address is always live.
+            // Arm the listener before advertising the address, so it is live when nvim reads it.
             string advertised;
 #if UNITY_EDITOR_WIN
             var pipeName = ServerPipeNameFor(projectRoot);
@@ -130,10 +115,8 @@ namespace NvimUnity.Editor
             var localName = pipeName.Substring(PipePrefix.Length);
             _listenerTask = Task.Run(() => ListenLoop(localName, token));
 #else
-            // Ephemeral port: unlike the stable hash-named pipe it CHANGES on every
-            // Start (each domain reload). sync-pipe.txt is rewritten below each time
-            // and nvim re-reads it per flush, so the fresh port is always advertised;
-            // nvim's drop-on-failed-connect covers the mid-recompile gap.
+            // Unlike the hash-named pipe, the port changes on every Start. sync-pipe.txt is
+            // rewritten below and nvim re-reads it per flush, so it always has the new one.
             _tcpListener = new TcpListener(IPAddress.Loopback, 0);
             _tcpListener.Start();
             advertised = "tcp:127.0.0.1:" + ((IPEndPoint)_tcpListener.LocalEndpoint).Port;
@@ -144,9 +127,8 @@ namespace NvimUnity.Editor
             // Drop the address on disk so the nvim lua side can read it without recomputing the hash.
             File.WriteAllText(Path.Combine(libDir, "sync-pipe.txt"), advertised);
 
-            // Advertise this editor's pid + derived Mono debugger port so the nvim DAP side can
-            // attach without guessing. Rewritten after every domain reload (Start re-runs), so
-            // it stays fresh; deleted only on a real editor quit (see DeleteEditorPidFile).
+            // Publish this editor's pid and debugger port so nvim's debugger can attach without
+            // guessing. Rewritten on every domain reload, deleted only when the editor quits.
             var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
             var debuggerPort = DebuggerPortForCurrentProcess();
             File.WriteAllText(
@@ -162,9 +144,8 @@ namespace NvimUnity.Editor
             EditorApplication.quitting -= Shutdown;
             EditorApplication.quitting += Shutdown;
 
-            // quitting only, NOT beforeAssemblyReload: Start rewrites the file after each
-            // reload, and deleting it on reload would leave nvim a mid-recompile gap with
-            // no file to discover the editor from.
+            // Quit only, not reload: deleting on reload would leave nvim with no file to find
+            // the editor through while scripts recompile.
             EditorApplication.quitting -= DeleteEditorPidFile;
             EditorApplication.quitting += DeleteEditorPidFile;
         }
@@ -182,14 +163,11 @@ namespace NvimUnity.Editor
         private static void Shutdown()
         {
             try { _cts?.Cancel(); } catch { }
-            // Stop the TCP listener (non-Windows transport) so the ephemeral port is
-            // released before the next domain arms a fresh one; null no-op on Windows.
+            // Release the port before the next domain arms its own listener; null on Windows.
             try { _tcpListener?.Stop(); } catch { }
             _tcpListener = null;
-            // Break every outstanding connection so a persistent nvim client is forced to
-            // reconnect to the next domain's fresh listener instead of writing into an
-            // orphaned pipe. Disposing also unblocks the pending ReadLineAsync (which takes
-            // no CancellationToken on .NET 4.7.1).
+            // Drop every connection so nvim reconnects to the next domain's listener.
+            // Disposing is also what unblocks the pending read.
             foreach (var kv in _connections)
             {
                 try { kv.Key.Dispose(); } catch { }
@@ -216,9 +194,8 @@ namespace NvimUnity.Editor
 
                     await server.WaitForConnectionAsync(ct).ConfigureAwait(false);
 
-                    // Hand the connected stream to its own reader task and immediately loop to
-                    // arm the next server instance, so a persistent nvim connection can't starve
-                    // a second nvim instance from connecting.
+                    // Read on a separate task and loop to arm the next instance, so one nvim
+                    // cannot block a second one from connecting.
                     var connected = server;
                     server = null;
                     _ = Task.Run(() => ReadConnection(connected, connected, ct));
@@ -231,10 +208,8 @@ namespace NvimUnity.Editor
             }
         }
 
-        // Background thread. Accept loop for the TCP transport (non-Windows). Mirrors
-        // ListenLoop's shape: accept → per-connection reader task → next accept.
-        // AcceptTcpClientAsync takes no CancellationToken on .NET 4.7.1; stopping the
-        // listener (Shutdown does it too) unblocks the pending accept.
+        // Background thread. Same shape as ListenLoop, for the TCP transport. Stopping the
+        // listener is what unblocks a pending accept.
         private static async Task TcpListenLoop(TcpListener listener, CancellationToken ct)
         {
             using (ct.Register(() => { try { listener.Stop(); } catch { } }))
@@ -262,14 +237,12 @@ namespace NvimUnity.Editor
             }
         }
 
-        // Background thread. Drains one connection's lines into the queue. `owner` is the
-        // disposable connection object tracked in _connections (the NamedPipeServerStream
-        // itself, or the TcpClient wrapping `stream`) — disposing it tears the stream down.
+        // Background thread. Queues one connection's lines. `owner` is the connection object;
+        // disposing it tears the stream down.
         private static async Task ReadConnection(IDisposable owner, Stream stream, CancellationToken ct)
         {
             _connections.TryAdd(owner, 0);
-            // ReadLineAsync takes no CancellationToken on .NET 4.7.1, so tear the stream down on
-            // cancellation to unblock a persistent, idle nvim connection during shutdown/reload.
+            // The read cannot be cancelled, so dispose the stream to unblock an idle connection.
             using (ct.Register(() => { try { owner.Dispose(); } catch { } }))
             {
                 try
@@ -297,8 +270,8 @@ namespace NvimUnity.Editor
             }
         }
 
-        // Main thread. Unity API calls happen here. Drains the whole queue into locals first,
-        // then acts once so a burst of nvim events costs at most one refresh (or N imports).
+        // Main thread, where Unity API calls are legal. Collects the whole queue first and then
+        // acts once, so a burst of nvim events costs one refresh.
         private const int ImportThreshold = 25;
 
         private static void DrainQueue()
@@ -353,8 +326,7 @@ namespace NvimUnity.Editor
                         pauseState = false;
                         break;
                     case "rearm":
-                        // RETIRED (see the deprecation block below). Label kept for wire
-                        // compatibility so an old nvim writing `rearm` degrades gracefully.
+                        // Retired, but still accepted so an older nvim degrades gracefully.
                         deprecatedRearm = true;
                         break;
                     case "dbgstatus":
@@ -418,22 +390,16 @@ namespace NvimUnity.Editor
                     EditorApplication.isPlaying = playState.Value;
                 }
 
-                // After the playState block, so a "play" + "pause" batch enters play
-                // mode already paused (nvim emits play/stop before pause/resume).
+                // After the play block, so a play+pause batch starts play mode already paused.
                 if (pauseState.HasValue)
                 {
-                    // Setting isPlaying is DEFERRED (takes effect on a later update), so
-                    // right after the playState block the isPlaying getter still reports
-                    // the old state. For the play+pause (or stop+pause) batch case the
-                    // just-requested playState is therefore the effective one; without a
-                    // playState in the batch, the live isPlaying is authoritative.
+                    // isPlaying only changes on a later update, so the getter still reports the
+                    // old state here. Trust what this batch just asked for, if it asked at all.
                     var effectivePlaying = playState.HasValue ? playState.Value : EditorApplication.isPlaying;
                     if (pauseState.Value)
                     {
-                        // Playing guard: setting isPaused in edit mode arms the pause
-                        // button, which would make the NEXT play session start paused.
-                        // (In the play+pause batch, arming it is exactly what makes the
-                        // deferred play session begin paused — so that case passes.)
+                        // Pausing in edit mode only arms the pause button, which would make the
+                        // next play session start paused. A play+pause batch wants exactly that.
                         if (effectivePlaying)
                         {
                             VLog("DrainQueue: EditorApplication.isPaused = true");
@@ -452,22 +418,16 @@ namespace NvimUnity.Editor
                     }
                 }
 
-                // RETIRED `rearm` verb. It used to toggle the AllowAttachedDebuggingOfEditor
-                // EditorPref off/on as a supposed programmatic version of Preferences ->
-                // External Tools -> "Editor Attaching". That pref is plausibly startup-read-only
-                // on 2019.3+ (the operative machinery is ScriptDebugInfoEnabled/codeOptimization),
-                // and it was never confirmed to actually re-arm the wedged Mono agent. The wedge
-                // recovery ladder now lives in DebuggerRecovery (dbgstatus / dbgrecover1-3).
+                // `rearm` used to toggle a debugger EditorPref that was never confirmed to fix
+                // anything. Recovery lives in DebuggerRecovery now.
                 if (deprecatedRearm)
                 {
                     Debug.LogWarning("[NvimUnity] `rearm` is retired and does nothing — use "
                         + "dbgstatus to probe the debugger agent and dbgrecover1/dbgrecover2/dbgrecover3 to recover it.");
                 }
 
-                // Debugger-agent wedge recovery (see DebuggerRecovery.cs). Each entry point is
-                // self-contained + try/caught internally, so a throw can't skip a sibling verb.
-                // Socket work is offloaded to a background thread inside these calls; only the
-                // main-thread-only bits (ManagedDebugger, codeOptimization, restart) run here.
+                // Debugger recovery (DebuggerRecovery.cs). Each call catches its own errors and
+                // moves socket work off this thread itself.
                 if (dbgStatus)   DebuggerRecovery.RunStatusProbe(_projectRoot);
                 if (dbgRecover1) DebuggerRecovery.Recover1_Disconnect(_projectRoot);
                 if (dbgRecover2) DebuggerRecovery.Recover2_CodeOptimizationFlip(_projectRoot);
@@ -486,11 +446,8 @@ namespace NvimUnity.Editor
             Debug.LogWarning("[NvimUnity] sync server: " + msg + " (further errors suppressed)");
         }
 
-        // Unity's embedded Mono soft-debugger agent listens on
-        // 127.0.0.1:(56000 + pid % 1000). This is the SINGLE source of that formula:
-        // Start writes it into editor-pid.txt for the nvim DAP side, and
-        // DebuggerRecovery probes the same port when checking/recovering the agent.
-        // Undocumented-but-stable Unity behavior (see the DAP fragility watchlist).
+        // Unity's Mono debugger listens on 127.0.0.1:(56000 + pid % 1000). Undocumented but
+        // stable, and this is the only place the formula lives.
         internal static int DebuggerPortForCurrentProcess()
         {
             var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
@@ -502,9 +459,8 @@ namespace NvimUnity.Editor
             return PipePrefix + ServerPipeStem + HashProjectRoot(projectRoot);
         }
 
-        // Per-project client address that we tell nvim to --listen on, so we can --remote-send
-        // to it later. Windows: named pipe. mac/linux: a unix-socket path under the temp dir
-        // (`nvim --listen` accepts a socket path there — MACOS_PLAN U3).
+        // The address we tell nvim to --listen on so we can --remote-send to it later.
+        // A named pipe on Windows, a unix socket path under the temp dir elsewhere.
         public static string DefaultClientPipeNameFor(string projectRoot)
         {
 #if UNITY_EDITOR_WIN

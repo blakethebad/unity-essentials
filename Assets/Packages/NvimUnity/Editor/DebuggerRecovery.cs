@@ -12,39 +12,15 @@ using Debug = UnityEngine.Debug;
 
 namespace NvimUnity.Editor
 {
-    // Wedge-recovery tooling for Unity's embedded Mono soft-debugger agent.
-    //
-    // WHY this exists: the agent performs its 13-byte "DWP-Handshake" (agent-first;
-    // the client echoes it) exactly once per accept. After an imperfect client detach
-    // nothing re-services the listen socket, yet the kernel keeps completing TCP
-    // handshakes into the listen backlog — so a later attach connects but never gets a
-    // handshake and no breakpoint ever binds, for the rest of the editor process. That
-    // "wedge" is invisible at the wire without probing, and used to force an editor
-    // restart. This module (a) probes the agent's own port to classify it and (b)
-    // offers a graduated recovery ladder, all driven by newline verbs over the existing
-    // sync pipe (dispatched from NeovimSyncServer.DrainQueue on the main thread):
-    //
-    //   dbgstatus    -> classify: armed | wedged | attached | no-listener
-    //   dbgrecover1  -> ManagedDebugger.Disconnect() (cheapest; no recompile)
-    //   dbgrecover2  -> CompilationPipeline.codeOptimization double-flip (2 recompiles)
-    //   dbgrecover3  -> scripted editor restart (guaranteed, heaviest)
-    //
-    // Results are reported two ways for the nvim side: Debug.Log (with the shared
-    // "[NvimUnity]" prefix) and a single-line JSON status file at
-    // <root>/Library/NvimUnity/dbg-status.txt (same dir as editor-pid.txt).
-    //
-    // API note: several editor entry points used here are not guaranteed stable across
-    // Unity versions (ManagedDebugger's exact member surface;
-    // RequestCloseAndRelaunchWithCurrentArguments is internal). Those are reached via
-    // reflection with a logged fallback so a missing member degrades to a clear warning
-    // instead of breaking compilation of the whole NvimUnity package.
+    // Unity's Mono debugger agent can wedge: after a messy client detach it stops answering the
+    // handshake, so later attaches bind no breakpoints. dbgstatus classifies the agent and
+    // dbgrecover1/2/3 fix it; both report to the console and Library/NvimUnity/dbg-status.txt.
     internal static class DebuggerRecovery
     {
         private const string StatusFileName = "dbg-status.txt";
 
-        // ---- SessionState keys for the recover2 domain-reload continuation ----
-        // SessionState survives domain reloads within one editor session and is cleared
-        // on editor quit — exactly the lifetime the codeOptimization double-flip needs.
+        // SessionState survives domain reloads and clears on quit, which is exactly the
+        // lifetime recover2's flip sequence needs.
         private const string Recover2StageKey = "NvimUnity.DbgRecover2.Stage";
         private const string Recover2RootKey  = "NvimUnity.DbgRecover2.Root";
         private const string StageSetDebug = "SetDebug"; // after this reload: flip to Debug
@@ -57,23 +33,16 @@ namespace NvimUnity.Editor
             Debug.Log("[NvimUnity] " + msg);
         }
 
-        // =====================================================================
-        // dbgstatus — classify the debugger agent (main-thread entry)
-        // =====================================================================
-        //
-        // WHY: distinguishing "wedged" from "busy" requires the ManagedDebugger.isAttached
-        // gate FIRST (on the main thread): the agent is single-client, so while a debugger
-        // is attached a second connect just sits in the backlog unserviced — wire-identical
-        // to a wedge. Only when nothing is attached do we probe the socket, and that probe
-        // is offloaded to a background thread (it blocks up to ~4s) per the house rule that
-        // DrainQueue/update callbacks never block on I/O.
+        // Is the agent armed, wedged, attached, or not listening? Check isAttached first: the
+        // agent takes one client, so an attached debugger looks just like a wedge on the wire.
+        // The socket probe blocks for seconds, so it runs off the main thread.
         public static void RunStatusProbe(string root)
         {
             try
             {
                 int port = NeovimSyncServer.DebuggerPortForCurrentProcess();
 
-                // Main-thread attach check: busy != wedged.
+                // Attach check first: busy is not the same as wedged.
                 bool attached;
                 if (TryGetDebuggerAttached(out attached) && attached)
                 {
@@ -81,9 +50,8 @@ namespace NvimUnity.Editor
                     return;
                 }
 
-                // Not attached -> safe to probe. Socket work off the main thread.
-                // VerboseLog reads EditorPrefs (main-thread-only) — capture it HERE and
-                // pass it in; the probe thread must never touch editor state.
+                // Nothing attached, so probing is safe. VerboseLog reads EditorPrefs, which is
+                // main thread only, so read it here and pass the value to the probe thread.
                 bool verbose = NeovimSyncServer.VerboseLog;
                 Task.Run(() =>
                 {
@@ -103,11 +71,9 @@ namespace NvimUnity.Editor
             }
         }
 
-        // Background thread. Connects to the agent's own loopback port and classifies it.
-        //   connect refused/timeout          -> "no-listener"
-        //   connected, no 13 bytes in 3s     -> "wedged"
-        //   connected, 13 handshake bytes    -> echo them + send VM_DISPOSE + close -> "armed"
-        // A completed probe IS a perfectly clean detach, so it leaves the agent re-armed.
+        // Background thread. No connection means "no-listener", a connection with no handshake
+        // means "wedged", a full handshake means "armed" — and finishing the handshake is a
+        // clean detach, so a successful probe leaves the agent ready for the next attach.
         private static string ProbeAgentSocket(int port, bool verbose)
         {
             TcpClient client = null;
@@ -158,8 +124,7 @@ namespace NvimUnity.Editor
                     return "wedged";
                 }
 
-                // Handshake received: echo it back, then a clean VM_DISPOSE. This is the
-                // perfectly clean detach that leaves the agent re-armed for the next attach.
+                // Echo the handshake, then VM_DISPOSE: the clean detach that re-arms the agent.
                 stream.Write(handshake, 0, handshake.Length);
                 stream.Flush();
                 byte[] dispose = BuildVmDispose();
@@ -178,8 +143,7 @@ namespace NvimUnity.Editor
             }
         }
 
-        // VM_DISPOSE command packet: 11-byte big-endian header, no data.
-        //   length=0x0000000B, id (any int), flags=0x00, command_set=0x01 (VM), command=0x06 (DISPOSE)
+        // VM_DISPOSE packet: an 11-byte big-endian header, no data.
         private static byte[] BuildVmDispose()
         {
             return new byte[]
@@ -192,9 +156,8 @@ namespace NvimUnity.Editor
             };
         }
 
-        // Writes the single-line status JSON to <root>/Library/NvimUnity/dbg-status.txt and
-        // logs it. Safe to call from the probe's background thread: File I/O is thread-safe
-        // and UnityEngine.Debug.Log marshals to the main thread internally.
+        // Writes one line of status JSON to Library/NvimUnity/dbg-status.txt and logs it.
+        // Safe from the probe thread: both file writes and Debug.Log are.
         private static void WriteAndLogStatus(string root, string status, int port)
         {
             string iso = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
@@ -212,15 +175,9 @@ namespace NvimUnity.Editor
             Debug.Log("[NvimUnity] dbgstatus: " + json);
         }
 
-        // =====================================================================
-        // dbgrecover1 — ManagedDebugger.Disconnect() (main-thread entry)
-        // =====================================================================
-        //
-        // WHY (cheapest rung): Unity's Mono fork exposes mono_debugger_disconnect(), which
-        // stops the debugger thread and resets agent_inited so the agent can re-init. The
-        // hypothesis is that the public ManagedDebugger.Disconnect() (the editor status-bar
-        // debugger UI is built on it) routes there and cleanly re-arms the agent with no
-        // recompile. UNVERIFIED as a wedge fix — hence the auto re-probe afterward.
+        // Cheapest fix: Disconnect() should stop the debugger thread and let the agent
+        // re-initialize, with no recompile. Unproven against a real wedge, so it re-probes
+        // afterwards to show whether it worked.
         public static void Recover1_Disconnect(string root)
         {
             try
@@ -263,17 +220,9 @@ namespace NvimUnity.Editor
             }
         }
 
-        // =====================================================================
-        // dbgrecover2 — codeOptimization double-flip (main-thread entry)
-        // =====================================================================
-        //
-        // WHY (middle rung): toggling CompilationPipeline.codeOptimization is the same
-        // machinery as the status-bar Debug button and must touch the agent live — flipping
-        // to Debug makes editor attach possible without a restart. A double-flip
-        // (Debug -> Release -> Debug) forces a full rebind. Cost: TWO recompile + domain
-        // reload cycles, so the driver MUST survive reloads. State lives in SessionState and
-        // the continuation runs from [InitializeOnLoadMethod] (Recover2Continuation below).
-        // Guard: if already Release, a single Release -> Debug flip suffices.
+        // Middle fix: flipping codeOptimization Debug to Release to Debug is the same switch as
+        // the status bar Debug button and forces the agent to rebind. It costs two recompiles,
+        // so the stage is kept in SessionState and Recover2Continuation resumes after each one.
         public static void Recover2_CodeOptimizationFlip(string root)
         {
             try
@@ -300,13 +249,8 @@ namespace NvimUnity.Editor
             }
         }
 
-        // Runs on every domain load. Drives the recover2 flip sequence across the recompiles
-        // it itself triggers. No-op unless a flip is in progress (SessionState stage set).
-        //
-        // Deferral is an EditorApplication.update poll (ScheduleMainThread), NOT delayCall:
-        // a delayCall registered here was observed to be silently dropped after the second
-        // reload (live, 2026-07-17) — the stage-2 flip applied but the final probe never ran.
-        // update callbacks are pumped unconditionally, so the poll cannot be lost.
+        // Runs on every domain load and does nothing unless a flip is in progress. Waits with an
+        // update poll, not delayCall: a delayCall here was seen to get dropped after a reload.
         [InitializeOnLoadMethod]
         private static void Recover2Continuation()
         {
@@ -350,15 +294,9 @@ namespace NvimUnity.Editor
             CompilationPipeline.codeOptimization = value;
         }
 
-        // =====================================================================
-        // dbgrecover3 — scripted editor restart (main-thread entry)
-        // =====================================================================
-        //
-        // WHY (guaranteed rung): a fresh editor process always re-arms the agent (and gets a
-        // fresh PID -> fresh 56000+pid%1000 port, which Start's editor-pid.txt rewrite covers).
-        // This just makes the "restart the editor" fix one keypress: save scenes + assets,
-        // then relaunch. RequestCloseAndRelaunchWithCurrentArguments is internal (precedent:
-        // Unity's InputSystem calls it) so it's reflected; OpenProject(current) is the fallback.
+        // Last resort, but always works: a fresh editor re-arms the agent. Saves scenes and
+        // assets, then relaunches through an internal editor method, falling back to reopening
+        // the project.
         public static void Recover3_RestartEditor(string root)
         {
             try
@@ -399,13 +337,7 @@ namespace NvimUnity.Editor
             }
         }
 
-        // =====================================================================
-        // Shared helpers
-        // =====================================================================
-
-        // Resolves UnityEditor.Scripting.ManagedDebugger by reflection. The plan documents it
-        // as public editor API for 2022.3, but its exact member surface isn't guaranteed
-        // stable, so callers reflect into it and log a clear failure rather than hard-linking.
+        // Found by reflection because its member surface is not stable across Unity versions.
         private static Type ResolveManagedDebuggerType()
         {
             return Type.GetType("UnityEditor.Scripting.ManagedDebugger, UnityEditor")
@@ -442,9 +374,7 @@ namespace NvimUnity.Editor
             }
         }
 
-        // Runs `action` on the main thread after `delaySeconds`, via an EditorApplication.update
-        // poll. MUST be called from the main thread (DrainQueue / delayCall) — it reads
-        // EditorApplication.timeSinceStartup and mutates the update callback list.
+        // Runs `action` after a delay by polling EditorApplication.update. Main thread only.
         private static void ScheduleMainThread(double delaySeconds, Action action)
         {
             double due = EditorApplication.timeSinceStartup + delaySeconds;

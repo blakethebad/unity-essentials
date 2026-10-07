@@ -11,12 +11,6 @@ namespace UnityEssentials.Utilities
         Critical
     }
 
-    /// <summary>
-    /// Header-less logging facade over one lazily created <see cref="CustomLogger"/>. Every method
-    /// is compiled out of builds that define neither UNITY_EDITOR nor DEVELOPMENT_BUILD, so the
-    /// arguments passed to it are not evaluated there — never rely on a side effect inside a log
-    /// argument.
-    /// </summary>
     public static class Log
     {
         private static CustomLogger _logger;

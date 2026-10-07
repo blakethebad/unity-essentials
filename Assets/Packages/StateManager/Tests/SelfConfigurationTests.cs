@@ -5,9 +5,8 @@ namespace UnityEssentials.States.Tests
 {
     /// <summary>
     /// Covers the configuration hooks <c>Initialize</c> invokes on a plain
-    /// <see cref="BaseStateManager{TState}"/>: their order and count, what states and transitions
-    /// they may declare through <see cref="Transitions{TState}"/>, and how a failing or re-entrant
-    /// hook is reported.
+    /// <see cref="BaseStateManager{TState}"/>: their order and count, what they may declare through
+    /// <see cref="Transitions{TState}"/>, and how a failing or re-entrant hook is reported.
     /// </summary>
     [TestFixture]
     public class SelfConfigurationTests
@@ -18,9 +17,6 @@ namespace UnityEssentials.States.Tests
             CallLog.Clear();
         }
 
-        // ---- Hook invocation -------------------------------------------------
-
-        /// <summary>Initialize runs OnInitialize, then InsertTransitions, once each.</summary>
         [Test]
         public void Initialize_InvokesOnInitializeThenInsertTransitions_Once()
         {
@@ -32,22 +28,21 @@ namespace UnityEssentials.States.Tests
                 new[] { HookStateManager.OnInitializeEntry, HookStateManager.InsertTransitionsEntry },
                 machine.HookLog);
 
-            // A machine only configures itself once, so the rejected second call must not re-run
-            // either hook and hand the states dictionary a duplicate registration.
+            // The rejected second call must not re-run either hook and hand the states dictionary a
+            // duplicate registration.
             Assert.Throws<StateConfigurationException>(() => machine.Initialize());
             Assert.AreEqual(2, machine.HookLog.Count);
         }
 
-        /// <summary>States registered from OnInitialize are live: the machine enters the first of them.</summary>
         [Test]
         public void Initialize_StatesAddedInOnInitialize_EntersFirstRegisteredState()
         {
-            // B registers first while A is the enum's default value, so a machine that ignored the
-            // hook's registrations and fell back to default(TState) would fail here.
+            // B registers first while A is the enum's default, so a machine that ignored the hook's
+            // registrations and fell back to default(TState) would fail here.
             var machine = new HookStateManager(m =>
             {
-                m.AddState(new RecordingState(TestState.B))
-                    .AddState(new RecordingState(TestState.A));
+                m.AddState(TestState.B, new RecordingState())
+                    .AddState(TestState.A, new RecordingState());
             });
 
             machine.Initialize();
@@ -57,15 +52,14 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.AreEqual(new[] { "Enter:B:from:B" }, CallLog.Entries);
         }
 
-        /// <summary>SetInitialState called from inside OnInitialize picks the state entered.</summary>
         [Test]
         public void Initialize_SetInitialStateInOnInitialize_EntersDeclaredState()
         {
             var machine = new HookStateManager(m =>
             {
-                m.AddState(new RecordingState(TestState.A))
-                    .AddState(new RecordingState(TestState.B))
-                    .AddState(new RecordingState(TestState.C))
+                m.AddState(TestState.A, new RecordingState())
+                    .AddState(TestState.B, new RecordingState())
+                    .AddState(TestState.C, new RecordingState())
                     .SetInitialState(TestState.C);
             });
 
@@ -75,9 +69,6 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.AreEqual(new[] { "Enter:C:from:C" }, CallLog.Entries);
         }
 
-        // ---- Declared transitions --------------------------------------------
-
-        /// <summary>A pair declared through the struct is permitted and transitions normally.</summary>
         [Test]
         public void InsertTransitions_DeclaredPair_ChangeStateSucceeds()
         {
@@ -102,7 +93,6 @@ namespace UnityEssentials.States.Tests
                 CallLog.Entries);
         }
 
-        /// <summary>A pair the hook left undeclared stays closed, direction by direction.</summary>
         [Test]
         public void InsertTransitions_UndeclaredPair_ThrowsInvalidTransitionException()
         {
@@ -120,7 +110,6 @@ namespace UnityEssentials.States.Tests
             Assert.Throws<InvalidTransitionException>(() => machine.ChangeState(TestState.A));
         }
 
-        /// <summary>The fan-out overload opens one source onto every target named, and nothing else.</summary>
         [Test]
         public void InsertTransitions_AllowFanOut_PermitsEveryTarget()
         {
@@ -142,7 +131,6 @@ namespace UnityEssentials.States.Tests
             Assert.IsFalse(machine.CanChangeState(TestState.A, TestState.A));
         }
 
-        /// <summary>AllowAny through the struct opens every ordered pair, self-transitions included.</summary>
         [Test]
         public void InsertTransitions_AllowAny_PermitsEveryPair()
         {
@@ -168,7 +156,6 @@ namespace UnityEssentials.States.Tests
             Assert.AreEqual(TestState.C, machine.CurrentStateType);
         }
 
-        /// <summary>Allow hands the struct back, so declarations chain into one statement.</summary>
         [Test]
         public void InsertTransitions_ChainedAllows_DeclareEveryPair()
         {
@@ -194,7 +181,6 @@ namespace UnityEssentials.States.Tests
             Assert.IsFalse(machine.CanChangeState(TestState.C, TestState.B));
         }
 
-        /// <summary>The struct only forwards: naming an unregistered state is still a configuration error.</summary>
         [Test]
         public void InsertTransitions_AllowWithUnregisteredState_ThrowsStateConfigurationException()
         {
@@ -211,17 +197,14 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.IsEmpty(CallLog.Entries);
         }
 
-        // ---- Hook failures ---------------------------------------------------
-
-        /// <summary>An exception from OnInitialize reaches the caller unchanged.</summary>
         [Test]
         public void Initialize_OnInitializeThrows_PropagatesUnchanged()
         {
             var failure = new InvalidOperationException("OnInitialize failed on purpose");
             var machine = new HookStateManager(m => { throw failure; });
 
-            // Assert.Throws matches the type exactly, so a StateManagerException wrapper around the
-            // hook's own exception would fail here before the identity check below could.
+            // Assert.Throws matches the type exactly, so a StateManagerException wrapper would fail
+            // here before the identity check below could.
             var thrown = Assert.Throws<InvalidOperationException>(() => machine.Initialize());
 
             Assert.AreSame(failure, thrown);
@@ -231,7 +214,6 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.AreEqual(new[] { HookStateManager.OnInitializeEntry }, machine.HookLog);
         }
 
-        /// <summary>An exception from InsertTransitions reaches the caller unchanged too.</summary>
         [Test]
         public void Initialize_InsertTransitionsThrows_PropagatesUnchanged()
         {
@@ -249,19 +231,17 @@ namespace UnityEssentials.States.Tests
             Assert.IsFalse(machine.IsInitialized);
             CollectionAssert.IsEmpty(CallLog.Entries);
 
-            // No state was entered, so the machine is still in its configuration phase rather than
-            // half-started on the state OnInitialize registered first.
+            // No state was entered, so the machine is still in its configuration phase.
             Assert.IsNull(machine.CurrentState);
             Assert.Throws<StateConfigurationException>(() => machine.ChangeState(TestState.B));
         }
 
-        /// <summary>Initialize called from inside OnInitialize is rejected as a configuration error.</summary>
         [Test]
         public void Initialize_CalledFromOnInitialize_ThrowsStateConfigurationException()
         {
             var machine = new HookStateManager(m =>
             {
-                m.AddState(new RecordingState(TestState.A));
+                m.AddState(TestState.A, new RecordingState());
                 m.Initialize();
             });
 
@@ -272,7 +252,6 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.IsEmpty(CallLog.Entries);
         }
 
-        /// <summary>And from inside InsertTransitions, the later of the two hooks.</summary>
         [Test]
         public void Initialize_CalledFromInsertTransitions_ThrowsStateConfigurationException()
         {
@@ -291,9 +270,6 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.IsEmpty(CallLog.Entries);
         }
 
-        // ---- Empty and combined configuration --------------------------------
-
-        /// <summary>A machine nothing configures still fails the empty-states check, after both hooks ran.</summary>
         [Test]
         public void Initialize_HooksConfigureNothing_ThrowsStateConfigurationException()
         {
@@ -303,19 +279,18 @@ namespace UnityEssentials.States.Tests
 
             Assert.IsFalse(machine.IsInitialized);
 
-            // The check runs after the hooks rather than before them, which is the whole reason a
-            // derived manager may register its states from OnInitialize.
+            // The empty-states check runs after the hooks, which is the whole reason a derived
+            // manager may register its states from OnInitialize.
             CollectionAssert.AreEqual(
                 new[] { HookStateManager.OnInitializeEntry, HookStateManager.InsertTransitionsEntry },
                 machine.HookLog);
         }
 
-        /// <summary>States registered from outside before Initialize combine with the hooks' own.</summary>
         [Test]
         public void Initialize_ExternalStateRegistration_CombinesWithHookConfiguration()
         {
             var machine = new HookStateManager(
-                m => m.AddState(new RecordingState(TestState.C)),
+                m => m.AddState(TestState.C, new RecordingState()),
                 delegate(in Transitions<TestState> transitions)
                 {
                     // A and B are registered externally, below: a hook declares transitions over
@@ -324,15 +299,12 @@ namespace UnityEssentials.States.Tests
                         .Allow(TestState.B, TestState.C);
                 });
 
-            // All external configuration still amounts to: register states, and optionally name the
-            // one to start in. Transitions are the hook's alone.
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
 
             machine.Initialize();
 
-            // The externally chosen initial state survived the hooks.
             Assert.AreEqual(TestState.A, machine.CurrentStateType);
 
             machine.ChangeState(TestState.B);
@@ -351,19 +323,17 @@ namespace UnityEssentials.States.Tests
                 CallLog.Entries);
         }
 
-        // ---- Hook callbacks --------------------------------------------------
-
         private static void AddAb(HookStateManager machine)
         {
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState());
         }
 
         private static void AddAbc(HookStateManager machine)
         {
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState());
         }
     }
 }

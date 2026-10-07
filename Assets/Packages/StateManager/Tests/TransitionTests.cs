@@ -4,16 +4,14 @@ using NUnit.Framework;
 namespace UnityEssentials.States.Tests
 {
     /// <summary>
-    /// Covers <c>ChangeState</c> and the transition table behind it: what a permitted move updates,
-    /// what a denied move must leave untouched, how self-transitions and <c>AllowAny</c> behave, how
-    /// a change requested mid-transition is deferred or rejected, and what a throwing entry hook
-    /// leaves behind.
+    /// Covers <c>ChangeState</c> and the transition table behind it: permitted and denied moves,
+    /// self-transitions and <c>AllowAny</c>, changes requested mid-transition, and what a throwing
+    /// entry hook leaves behind.
     /// </summary>
     [TestFixture]
     public class TransitionTests
     {
-        // The single entry Initialize leaves behind when the machine starts on a recording A: entry
-        // is passed the initial state as its own previous. Log assertions start from this.
+        // The single entry Initialize leaves behind when the machine starts on a recording A.
         private const string InitialEntryOfA = "Enter:A:from:A";
 
         [SetUp]
@@ -22,42 +20,34 @@ namespace UnityEssentials.States.Tests
             CallLog.Clear();
         }
 
-        // ---- Fixture helpers ----------------------------------------------
-
-        // Recording states for A, B and C, declaring `pairs` when initialized, with no initial state
-        // chosen yet. Tests that compare against a specific state instance build their machine
-        // inline instead, since the instances created here are not handed back. D is deliberately
-        // never registered — it is the fixture's stand-in for a state nothing has heard of.
+        // D is deliberately never registered — the fixture's stand-in for a state nothing has heard of.
         private static BaseStateManager<TestState> AbcMachine(params (TestState from, TestState to)[] pairs)
         {
             var machine = new PlainStateManager(pairs);
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState());
 
             return machine;
         }
 
-        // The same three-state machine, with every pair opened by AllowAny instead of a declared list.
         private static BaseStateManager<TestState> AbcMachineAllowingAll()
         {
             var machine = PlainStateManager.AllowingAll();
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C));
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState());
 
             return machine;
         }
-
-        // ---- Allowed transitions ------------------------------------------
 
         [Test]
         public void ChangeState_AllowedTransition_UpdatesCurrentStateAndType()
         {
-            var b = new RecordingState(TestState.B);
+            var b = new RecordingState();
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(b)
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, b)
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -70,15 +60,13 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void ChangeState_AllowedTransition_UpdatesPreviousStateAndType()
         {
-            var a = new RecordingState(TestState.A);
+            var a = new RecordingState();
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(a)
-                .AddState(new RecordingState(TestState.B))
+            machine.AddState(TestState.A, a)
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
-            // Null before the first transition is the documented "never moved" sentinel, so the
-            // assertion after the move only means something once this one has held.
             Assert.IsNull(machine.PreviousStateType);
             Assert.IsNull(machine.PreviousState);
 
@@ -91,16 +79,16 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void ChangeState_ChainOfTransitions_TracksPreviousStateEachStep()
         {
-            var a = new RecordingState(TestState.A);
-            var b = new RecordingState(TestState.B);
-            var c = new RecordingState(TestState.C);
+            var a = new RecordingState();
+            var b = new RecordingState();
+            var c = new RecordingState();
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.C),
                 (TestState.C, TestState.A));
-            machine.AddState(a)
-                .AddState(b)
-                .AddState(c)
+            machine.AddState(TestState.A, a)
+                .AddState(TestState.B, b)
+                .AddState(TestState.C, c)
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -117,8 +105,6 @@ namespace UnityEssentials.States.Tests
             Assert.AreEqual(TestState.C, machine.PreviousStateType);
             Assert.AreSame(c, machine.PreviousState);
         }
-
-        // ---- Denied transitions -------------------------------------------
 
         [Test]
         public void ChangeState_WithNoConfiguredTransitions_ThrowsInvalidTransitionException()
@@ -167,8 +153,7 @@ namespace UnityEssentials.States.Tests
 
             Assert.Throws<InvalidTransitionException>(() => machine.ChangeState(TestState.C));
 
-            // Validation runs before any hook, so the log must still hold nothing but the initial
-            // entry — in particular no "Exit:A:to:C".
+            // Validation runs before any hook, so in particular there is no "Exit:A:to:C".
             CollectionAssert.AreEqual(new[] { InitialEntryOfA }, CallLog.Entries);
             Assert.IsFalse(exitedFired);
             Assert.IsFalse(enteredFired);
@@ -183,12 +168,9 @@ namespace UnityEssentials.States.Tests
             machine.SetInitialState(TestState.A);
             machine.Initialize();
 
-            // D is registered nowhere, which is a broken machine rather than a denied request —
-            // hence the configuration exception in place of InvalidTransitionException.
+            // D is registered nowhere, which is a broken machine rather than a denied request.
             Assert.Throws<StateConfigurationException>(() => machine.ChangeState(TestState.D));
         }
-
-        // ---- Self-transitions ---------------------------------------------
 
         [Test]
         public void ChangeState_SelfTransitionWithoutTableEntry_ThrowsInvalidTransitionException()
@@ -209,8 +191,7 @@ namespace UnityEssentials.States.Tests
 
             machine.ChangeState(TestState.A);
 
-            // A declared self-transition is an ordinary transition: full exit/enter pair, both hooks
-            // naming A on either side of the swap.
+            // A declared self-transition is an ordinary transition: a full exit/enter pair.
             CollectionAssert.AreEqual(
                 new[] { InitialEntryOfA, "Exit:A:to:A", "Enter:A:from:A" },
                 CallLog.Entries);
@@ -219,10 +200,10 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void ChangeState_SelfTransition_SetsPreviousStateToSameType()
         {
-            var a = new RecordingState(TestState.A);
+            var a = new RecordingState();
             var machine = new PlainStateManager((TestState.A, TestState.A));
-            machine.AddState(a)
-                .AddState(new RecordingState(TestState.B))
+            machine.AddState(TestState.A, a)
+                .AddState(TestState.B, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -234,8 +215,6 @@ namespace UnityEssentials.States.Tests
             Assert.AreSame(a, machine.CurrentState);
         }
 
-        // ---- Blanket permission -------------------------------------------
-
         [Test]
         public void AllowAny_PermitsEveryPairIncludingSelf()
         {
@@ -245,8 +224,8 @@ namespace UnityEssentials.States.Tests
 
             var states = new[] { TestState.A, TestState.B, TestState.C };
 
-            // Walking every ordered pair. The positioning hop is itself a self-transition whenever the
-            // machine already sits on `from`, so the diagonal gets exercised from both directions.
+            // The positioning hop is itself a self-transition whenever the machine already sits on
+            // `from`, so the diagonal gets exercised from both directions.
             foreach (var from in states)
             {
                 foreach (var to in states)
@@ -274,16 +253,13 @@ namespace UnityEssentials.States.Tests
             Assert.Throws<StateConfigurationException>(() => machine.ChangeState(TestState.D));
         }
 
-        // ---- Transition queries -------------------------------------------
-
         [Test]
         public void CanChangeState_AllowedPair_ReturnsTrue()
         {
             var machine = AbcMachine((TestState.A, TestState.B));
 
-            // A pure query that never throws: it answers before Initialize as readily as after,
-            // which is what makes it usable from UI code deciding whether to offer a button. The
-            // answer is no until then, because the pair is only declared once the hook has run.
+            // Answers before Initialize without throwing, and the answer is no until then because
+            // the pair is only declared once the hook has run.
             Assert.IsFalse(machine.CanChangeState(TestState.A, TestState.B));
 
             machine.SetInitialState(TestState.A);
@@ -305,12 +281,8 @@ namespace UnityEssentials.States.Tests
             Assert.IsFalse(machine.CanChangeState(TestState.B, TestState.A));
             Assert.IsFalse(machine.CanChangeState(TestState.A, TestState.A));
             Assert.IsFalse(machine.CanChangeState(TestState.A, TestState.C));
-
-            // Unregistered states are not special-cased: the table simply never opened the pair.
             Assert.IsFalse(machine.CanChangeState(TestState.A, TestState.D));
         }
-
-        // ---- Re-entrancy --------------------------------------------------
 
         [Test]
         public void ChangeState_FromEnterState_DefersUntilTransitionCompletes()
@@ -318,9 +290,9 @@ namespace UnityEssentials.States.Tests
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.C));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new ChangeOnEnterState(TestState.B, TestState.C))
-                .AddState(new RecordingState(TestState.C))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new ChangeOnEnterState(TestState.C))
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -328,9 +300,8 @@ namespace UnityEssentials.States.Tests
 
             machine.ChangeState(TestState.B);
 
-            // B's entry hook requested C, which ran as its own full transition — after the move to B
-            // completed, StateEntered included: the entry hook's request was deferred, not nested.
-            // B is the probe, which records nothing itself, so its own hooks leave no entries.
+            // The move to C ran after the move to B completed, StateEntered included: the entry
+            // hook's request was deferred, not nested. B is the probe and records nothing itself.
             Assert.AreEqual(TestState.C, machine.CurrentStateType);
             Assert.AreEqual(TestState.B, machine.PreviousStateType);
             CollectionAssert.AreEqual(
@@ -352,15 +323,14 @@ namespace UnityEssentials.States.Tests
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A),
                 (TestState.B, TestState.C));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new DoubleChangeOnEnterState(TestState.B, TestState.A, TestState.C))
-                .AddState(new RecordingState(TestState.C))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new DoubleChangeOnEnterState(TestState.A, TestState.C))
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
-            // Both of the hook's requests name pairs the table permits, so the one-deferral-per-
-            // transition rule is the only thing that can reject the second. Its rejection escapes
-            // the entry hook and comes back wrapped by the transition that ran it.
+            // Both requests name permitted pairs, so only the one-deferral-per-transition rule can
+            // reject the second.
             var exception = Assert.Throws<StateManagerException>(() => machine.ChangeState(TestState.B));
             Assert.IsInstanceOf<StateManagerException>(exception.InnerException);
             StringAssert.Contains("already deferred", exception.Message);
@@ -373,14 +343,14 @@ namespace UnityEssentials.States.Tests
         public void ChangeState_DeferredChainNeverSettles_ThrowsStateManagerException()
         {
             // B and C defer into each other forever; the machine must turn that cycle into an
-            // exception rather than spin inside one ChangeState call for the rest of the frame.
+            // exception rather than spin inside one ChangeState call.
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.C),
                 (TestState.C, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new ChangeOnEnterState(TestState.B, TestState.C))
-                .AddState(new ChangeOnEnterState(TestState.C, TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new ChangeOnEnterState(TestState.C))
+                .AddState(TestState.C, new ChangeOnEnterState(TestState.B))
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -391,12 +361,11 @@ namespace UnityEssentials.States.Tests
         [Test]
         public void ChangeState_DeferredTargetNotAllowed_ThrowsInvalidTransitionInsideWrapper()
         {
-            // B's entry hook requests A, but B -> A is never declared. The deferral validates at the
-            // call site, so the entry hook is what the InvalidTransitionException escapes from — and
-            // it reaches the caller wrapped by the transition that ran the hook.
+            // B's entry hook requests A, but B -> A is never declared: the deferral validates at the
+            // call site, so the rejection escapes the hook and reaches the caller wrapped.
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new ChangeOnEnterState(TestState.B, TestState.A))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new ChangeOnEnterState(TestState.A))
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -411,9 +380,9 @@ namespace UnityEssentials.States.Tests
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.A, TestState.C));
-            machine.AddState(new ChangeOnExitState(TestState.A, TestState.C))
-                .AddState(new RecordingState(TestState.B))
-                .AddState(new RecordingState(TestState.C))
+            machine.AddState(TestState.A, new ChangeOnExitState(TestState.C))
+                .AddState(TestState.B, new RecordingState())
+                .AddState(TestState.C, new RecordingState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -435,8 +404,8 @@ namespace UnityEssentials.States.Tests
             machine.Initialize();
             CallLog.Clear();
 
-            // Subscribed after Initialize so the handler is not fired by the initial entry, and
-            // conditional on B because it fires for the deferred move to C as well.
+            // Subscribed after Initialize so the initial entry does not fire it, and conditional on B
+            // because it fires for the deferred move to C as well.
             machine.StateEntered += (from, to) =>
             {
                 if (to == TestState.B)
@@ -447,8 +416,6 @@ namespace UnityEssentials.States.Tests
 
             machine.ChangeState(TestState.B);
 
-            // The handler runs after the entry hook, so the move to B is complete in the log before
-            // the deferred move to C begins.
             Assert.AreEqual(TestState.C, machine.CurrentStateType);
             Assert.AreEqual(TestState.B, machine.PreviousStateType);
             CollectionAssert.AreEqual(
@@ -456,22 +423,18 @@ namespace UnityEssentials.States.Tests
                 CallLog.Entries);
         }
 
-        // ---- Entry failures -----------------------------------------------
-
         [Test]
         public void ChangeState_EnterStateThrows_MachineEndsInTargetState()
         {
             var machine = new PlainStateManager((TestState.A, TestState.B));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new ThrowingEnterState(TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new ThrowingEnterState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
             var exception = Assert.Throws<StateManagerException>(
                 () => machine.ChangeState(TestState.B));
 
-            // The hook's failure is reported, not swallowed and not replaced: the wrapper names the
-            // stage that failed, and the hook's own exception is kept underneath it intact.
             StringAssert.Contains("EnterState hook", exception.Message);
             Assert.IsInstanceOf<InvalidOperationException>(exception.InnerException);
             Assert.AreEqual(ThrowingEnterState.FailureMessage, exception.InnerException.Message);
@@ -488,8 +451,8 @@ namespace UnityEssentials.States.Tests
             var machine = new PlainStateManager(
                 (TestState.A, TestState.B),
                 (TestState.B, TestState.A));
-            machine.AddState(new RecordingState(TestState.A))
-                .AddState(new ThrowingEnterState(TestState.B))
+            machine.AddState(TestState.A, new RecordingState())
+                .AddState(TestState.B, new ThrowingEnterState())
                 .SetInitialState(TestState.A);
             machine.Initialize();
 
@@ -500,8 +463,8 @@ namespace UnityEssentials.States.Tests
             Assert.AreEqual(TestState.A, machine.CurrentStateType);
             Assert.AreEqual(TestState.B, machine.PreviousStateType);
 
-            // The recovery hop ran its hooks normally, which is the observable proof that the guard
-            // was released by the finally block on the way out of the failed transition.
+            // The recovery hop running its hooks normally is the observable proof that the guard was
+            // released on the way out of the failed transition.
             CollectionAssert.AreEqual(
                 new[] { InitialEntryOfA, "Exit:A:to:B", "Enter:A:from:B" },
                 CallLog.Entries);

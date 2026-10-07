@@ -2,12 +2,6 @@ using System;
 
 namespace UnityEssentials.Utilities
 {
-    /// <summary>
-    /// A stopwatch-shaped mutable struct counting managed heap growth across a span via
-    /// GC.GetTotalMemory. The reading is process-wide, so other threads and engine code count too,
-    /// and a collection inside a span makes the result a lower bound, setting
-    /// <see cref="CollectionOccurred"/>. Copies count independently — keep a counter in one local.
-    /// </summary>
     public struct AllocationCounter
     {
         private long _accumulatedBytes;
@@ -50,8 +44,6 @@ namespace UnityEssentials.Utilities
                 return;
             }
 
-            // Collection baseline before the byte baseline: a collection landing between the two
-            // reads then still moves the count by Stop instead of passing unnoticed.
             _spanStartCollections = TotalCollections();
             _spanStartBytes = GC.GetTotalMemory(false);
             _isRunning = true;
@@ -65,8 +57,6 @@ namespace UnityEssentials.Utilities
                 return;
             }
 
-            // Mirror of Start: bytes first, so a collection between the two reads is flagged rather
-            // than silently swallowed by the clamp below.
             var delta = GC.GetTotalMemory(false) - _spanStartBytes;
             _accumulatedBytes += delta > 0L ? delta : 0L;
 

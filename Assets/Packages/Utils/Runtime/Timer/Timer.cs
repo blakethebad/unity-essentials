@@ -69,9 +69,7 @@ namespace UnityEssentials.Utilities
             get
             {
                 if (_mode == TimerMode.Stopwatch)
-                {
                     return 0f;
-                }
 
                 var remaining = _duration - (float)_elapsedSeconds;
                 return remaining > 0f ? remaining : 0f;
@@ -95,31 +93,24 @@ namespace UnityEssentials.Utilities
         /// <summary>Starts or resumes the timer. A finished countdown stays finished — use <see cref="Restart"/>.</summary>
         public void Start()
         {
-            StaticResetRegistry.AssertMainThread();
+            MainThreadGuard.AssertMainThread();
 
             if (_isRunning || _isCompleted)
-            {
                 return;
-            }
 
             _isRunning = true;
 
-            // Outside play mode there is no frame loop to join; tests drive Tick themselves.
             if (Application.isPlaying)
-            {
                 TimerRunner.Add(this);
-            }
         }
 
         /// <summary>Pauses the timer, keeping the elapsed time so <see cref="Start"/> resumes from it.</summary>
         public void Stop()
         {
-            StaticResetRegistry.AssertMainThread();
+            MainThreadGuard.AssertMainThread();
 
             if (!_isRunning)
-            {
                 return;
-            }
 
             _isRunning = false;
             TimerRunner.Remove(this);
@@ -128,7 +119,7 @@ namespace UnityEssentials.Utilities
         /// <summary>Stops the timer and returns it to zero, clearing the completed state.</summary>
         public void Reset()
         {
-            StaticResetRegistry.AssertMainThread();
+            MainThreadGuard.AssertMainThread();
 
             _isRunning = false;
             _isCompleted = false;
@@ -147,16 +138,12 @@ namespace UnityEssentials.Utilities
         {
             // A non-positive delta must never rewind the timer; a paused frame is simply skipped.
             if (!_isRunning || deltaTime <= 0f)
-            {
                 return;
-            }
 
             _elapsedSeconds += deltaTime;
 
             if (_mode == TimerMode.Stopwatch)
-            {
                 return;
-            }
 
             while (_elapsedSeconds >= _duration)
             {
@@ -173,12 +160,8 @@ namespace UnityEssentials.Utilities
                 _elapsedSeconds -= _duration;
                 RaiseCompleted();
 
-                // The handler may have stopped, reset or restarted the timer; honour that
-                // immediately instead of grinding out the rest of a delta it no longer owns.
                 if (!_isRunning)
-                {
                     return;
-                }
             }
         }
 
@@ -186,9 +169,7 @@ namespace UnityEssentials.Utilities
         {
             var handler = Completed;
             if (handler == null)
-            {
                 return;
-            }
 
             try
             {
@@ -196,8 +177,6 @@ namespace UnityEssentials.Utilities
             }
             catch (Exception exception)
             {
-                // State is already consistent at this point, so a faulty subscriber only costs
-                // itself: the timer keeps looping and the runner keeps ticking everything else.
                 Debug.LogException(exception);
             }
         }

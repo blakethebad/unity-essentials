@@ -7,7 +7,7 @@ namespace UnityEssentials.Utilities.Tests
 {
     /// <summary>
     /// Covers the plain C# singleton: lazy creation, identity, the direct-<c>new</c> guard, exception
-    /// unwrapping with retry, concurrent first access and the domain-reload reset hook.
+    /// unwrapping with retry and concurrent first access.
     /// </summary>
     [TestFixture]
     public class SingletonTests
@@ -15,7 +15,7 @@ namespace UnityEssentials.Utilities.Tests
         [SetUp]
         public void SetUp()
         {
-            StaticResetRegistry.ResetStatics();
+            SingletonCacheReset.ClearAllPlainSingletons();
             WellBehavedSingleton.ConstructionCount = 0;
             ParallelSingleton.ConstructionCount = 0;
             ThrowOnceSingleton.ResetProbe();
@@ -24,7 +24,7 @@ namespace UnityEssentials.Utilities.Tests
         [TearDown]
         public void TearDown()
         {
-            StaticResetRegistry.ResetStatics();
+            SingletonCacheReset.ClearAllPlainSingletons();
             ThrowOnceSingleton.ShouldThrow = false;
         }
 
@@ -133,16 +133,5 @@ namespace UnityEssentials.Utilities.Tests
             }
         }
 
-        [Test]
-        public void ResetStatics_ClearsTheInstance()
-        {
-            var first = WellBehavedSingleton.Instance;
-
-            StaticResetRegistry.ResetStatics();
-
-            Assert.IsFalse(WellBehavedSingleton.HasInstance);
-            Assert.AreNotSame(first, WellBehavedSingleton.Instance);
-            Assert.AreEqual(2, WellBehavedSingleton.ConstructionCount);
-        }
     }
 }

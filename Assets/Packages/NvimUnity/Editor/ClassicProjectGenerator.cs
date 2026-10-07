@@ -11,11 +11,6 @@ using System.Text;
 using System.Security;
 using System.Security.Cryptography;
 
-//TODO: Create File Tracker with Package Manager and Last Write Tracking Logic
-//The full surface NeovimScriptEditor / NeovimSyncServer / NeovimAssetPostprocessor
-//consume — every generator (Classic legacy-style, Roslyn SDK-style) implements it,
-//and the selected one is created by NeovimScriptEditor.CreateGenerator from
-//NvimUnityConfig.GeneratorType.
 public interface IGenerator
 {
     void SyncProject();
@@ -189,7 +184,7 @@ public class ClassicProjectGenerator : IGenerator
             _userExtensions[i] = $".{extensions[i]}";
         }
 
-        //Rider handles manifest.json changes and unity internal package changes and syncs so maybe we should as well
+        //Other IDE packages also sync on manifest.json and internal package changes, so maybe we should too
 
         var hasValidAffectedFile = affectedFiles.Any(ShouldFileBePartOfSolution);
         var hasValidReimport = reimportedFiles.Any((s =>
@@ -198,7 +193,7 @@ public class ClassicProjectGenerator : IGenerator
             return extension == ".asmdef" || extension == ".asmref" || Path.GetFileName(s) == "csc.rsp";
         }));
 
-        //Rider also adds editor data changes compilation define changes and last write time changes in here
+        //Editor data, compilation define and last write time changes could be checked here too
         if (hasValidAffectedFile || hasValidReimport)
         {
             SyncProject();
@@ -327,8 +322,8 @@ public class ClassicProjectGenerator : IGenerator
     }
 
     //TODO: Think about moving project file builder to its own file
-    //virtual: the ONLY seam a generator variant overrides — RoslynProjectGenerator
-    //swaps this for SDK-style emission while inheriting all collection/sln logic.
+    //virtual: the only method a generator variant overrides. RoslynProjectGenerator swaps
+    //it for SDK-style output and inherits everything else.
     protected virtual string BuildProjectFileContent(StringBuilder stringBuilder, ProjectPart assembly, AssemblyUsage assemblyUsage)
     {
         var responseFileDatas = assembly.GetResponseFileData(ProjectDirectory);
@@ -346,11 +341,11 @@ public class ClassicProjectGenerator : IGenerator
                .AppendLine("  <PropertyGroup>")
         .Append("    <LangVersion>").Append(GetLangVersion(responseFileArgs["langversion"], assembly)).AppendLine("</LangVersion>")
         .AppendLine(
-          "    <_TargetFrameworkDirectories>non_empty_path_generated_by_unity.rider.package</_TargetFrameworkDirectories>")
+          "    <_TargetFrameworkDirectories>non_empty_path_generated_by_nvim_unity</_TargetFrameworkDirectories>")
         .AppendLine(
-          "    <_FullFrameworkReferenceAssemblyPaths>non_empty_path_generated_by_unity.rider.package</_FullFrameworkReferenceAssemblyPaths>")
+          "    <_FullFrameworkReferenceAssemblyPaths>non_empty_path_generated_by_nvim_unity</_FullFrameworkReferenceAssemblyPaths>")
         .AppendLine("    <DisableHandlePackageFileConflicts>true</DisableHandlePackageFileConflicts>");
-        //TODO? ABOVE is the rider package lines ask about how to replace them
+        //TODO? The two dummy paths above only have to be non-empty, check if they can go
 
         var rulesetPaths = new HashSet<string>(responseFileArgs["ruleset"]);
 #if UNITY_2020_2_OR_NEWER
@@ -576,7 +571,7 @@ public class ClassicProjectGenerator : IGenerator
 
     public static IEnumerable<string> GetNoWarn(List<string> codes)
     {
-#if UNITY_2020_1 // RIDER-77206 Unity 2020.1.3 'PlayerSettings' does not contain a definition for 'suppressCommonWarnings'
+#if UNITY_2020_1 // 2020.1.3 'PlayerSettings' has no 'suppressCommonWarnings', so reflect for it
       var type = typeof(PlayerSettings);
       var propertyInfo = type.GetProperty("suppressCommonWarnings");
       if (propertyInfo != null && propertyInfo.GetValue(null) is bool && (bool)propertyInfo.GetValue(null))
@@ -669,7 +664,7 @@ public class ClassicProjectGenerator : IGenerator
     protected static string[] GetRoslynAdditionalFiles(ProjectPart assembly, ILookup<string, string> otherResponseFilesData)
     {
         var additionalFilePathsFromCompilationPipeline = Array.Empty<string>();
-#if UNITY_2021_3 // https://github.com/JetBrains/resharper-unity/issues/2401
+#if UNITY_2021_3 // 2021.3 does not expose the property, so reflect for it
       var type = assembly.CompilerOptions.GetType();
       var propertyInfo = type.GetProperty("RoslynAdditionalFilePaths");
       if (propertyInfo != null && propertyInfo.GetValue(assembly.CompilerOptions) is string[] value)
@@ -688,7 +683,7 @@ public class ClassicProjectGenerator : IGenerator
     protected static string GetGlobalAnalyzerConfigFile(ProjectPart assembly)
     {
         var configFile = string.Empty;
-#if UNITY_2021_3 // https://github.com/JetBrains/resharper-unity/issues/2401
+#if UNITY_2021_3 // 2021.3 does not expose the property, so reflect for it
       var type = assembly.CompilerOptions.GetType();
       var propertyInfo = type.GetProperty("AnalyzerConfigPath");
       if (propertyInfo != null && propertyInfo.GetValue(assembly.CompilerOptions) is string value)
@@ -1049,7 +1044,6 @@ public class ClassicProjectGenerator : IGenerator
             {
                 if (node.Children == null)
                     node.Children = new Dictionary<string, TrieNode>(StringComparer.OrdinalIgnoreCase);
-                // ReSharper disable once CanSimplifyDictionaryLookupWithTryAdd
                 if (!node.Children.ContainsKey(part))
                     node.Children[part] = new TrieNode();
 

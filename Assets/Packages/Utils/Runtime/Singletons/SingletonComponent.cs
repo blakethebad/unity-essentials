@@ -2,25 +2,15 @@ using UnityEngine;
 
 namespace UnityEssentials.Utilities
 {
-    /// <summary>
-    /// MonoBehaviour singleton: <c>Instance</c> returns the live instance, finds one in the loaded
-    /// scenes, or creates a hidden host GameObject for it. Duplicates destroy their own component
-    /// with a warning and leave the GameObject they sit on untouched.
-    /// </summary>
     public abstract class SingletonComponent<T> : MonoBehaviour where T : SingletonComponent<T>
     {
         private static T _instance;
-
-        static SingletonComponent()
-        {
-            StaticResetRegistry.Register(() => _instance = null);
-        }
 
         public static T Instance
         {
             get
             {
-                StaticResetRegistry.AssertMainThread();
+                MainThreadGuard.AssertMainThread();
 
                 if (SingletonComponentRuntime.IsQuitting)
                 {
@@ -30,12 +20,8 @@ namespace UnityEssentials.Utilities
                     return null;
                 }
 
-                // Unity's overloaded == is load-bearing here: a destroyed component still has a live
-                // managed reference, and that reference must be treated as "no instance".
                 if (_instance != null)
-                {
                     return _instance;
-                }
 
                 var existing = FindAnyObjectByType<T>();
                 if (existing != null)
@@ -49,9 +35,6 @@ namespace UnityEssentials.Utilities
                     hideFlags = HideFlags.HideAndDontSave
                 };
 
-                // In play mode AddComponent runs Awake synchronously, which already adopts the new
-                // component; adopting it again here is idempotent and covers EditMode, where Awake
-                // is never called automatically.
                 Adopt(host.AddComponent<T>());
                 return _instance;
             }
@@ -59,10 +42,6 @@ namespace UnityEssentials.Utilities
 
         public static bool HasInstance => _instance != null;
 
-        /// <summary>
-        /// Claims the singleton slot, or destroys this component when another instance already owns
-        /// it. Overrides must call <c>base.Awake()</c> first and return if this component was destroyed.
-        /// </summary>
         protected virtual void Awake()
         {
             if (_instance != null && _instance != this)
@@ -92,12 +71,8 @@ namespace UnityEssentials.Utilities
         {
             _instance = instance;
 
-            // DontDestroyOnLoad is play-mode only and logs an error for non-root objects, so a
-            // singleton parented under a scene object simply stays with its scene.
             if (Application.isPlaying && instance.transform.parent == null)
-            {
                 DontDestroyOnLoad(instance.gameObject);
-            }
         }
     }
 
@@ -105,8 +80,6 @@ namespace UnityEssentials.Utilities
     {
         internal static bool IsQuitting;
 
-        // Non-generic on purpose: RuntimeInitializeOnLoadMethod never fires on a generic type, so
-        // the quitting flag every SingletonComponent<T> reads has to live here.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void Initialize()
         {

@@ -5,8 +5,7 @@ using UnityEditor;
 
 namespace NvimUnity.Editor
 {
-    // Mirrors RiderAssetPostprocessor. Returning true here tells Unity's built-in
-    // csproj generator to back off when Neovim is the selected external editor.
+    // Returning true tells Unity's own csproj generator to back off while Neovim is the editor.
     internal class NeovimAssetPostprocessor : AssetPostprocessor
     {
         public static bool OnPreGeneratingCSProjectFiles()
@@ -14,10 +13,8 @@ namespace NvimUnity.Editor
             return IsNeovimSelected();
         }
 
-        // Fires for every asset import batch (imports, moves/renames, deletes). Unity's code-editor
-        // SyncIfNeeded path misses in-editor moves, so this is the reliable universal hook to keep
-        // csproj/sln regenerated after .cs/.asmdef/.asmref changes. Idempotent-cheap: SyncProject
-        // only rewrites files whose content changed.
+        // Runs after every asset import batch. Unity's SyncIfNeeded misses in-editor moves, so
+        // regeneration happens here instead. SyncProject only rewrites files that changed.
         private static void OnPostprocessAllAssets(
             string[] importedAssets, string[] deletedAssets, string[] movedAssets, string[] movedFromAssetPaths)
         {
@@ -30,8 +27,7 @@ namespace NvimUnity.Editor
                 && !HasRelevantAsset(movedFromAssetPaths))
                 return;
 
-            // SyncProject writes .csproj/.sln (not assets), so it cannot re-trigger this callback.
-            // Called once per batch, not per file. Null generator (assembly reload) -> no-op.
+            // Writes .csproj/.sln only, so it cannot re-trigger this callback. Null during reloads.
             NeovimSyncServer.ActiveGenerator?.SyncProject();
         }
 

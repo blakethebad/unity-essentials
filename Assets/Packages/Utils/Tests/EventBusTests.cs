@@ -9,7 +9,7 @@ namespace UnityEssentials.Utilities.Tests
 {
     /// <summary>
     /// Covers the EventBus contract: delivery and ordering, subscribe/unsubscribe bookkeeping,
-    /// duplicate subscriptions, bus isolation, handler exception containment and the reset action.
+    /// duplicate subscriptions, channel isolation and handler exception containment.
     /// </summary>
     [TestFixture]
     public class EventBusTests
@@ -33,22 +33,20 @@ namespace UnityEssentials.Utilities.Tests
 
         private static void ClearAllChannels()
         {
-            EventBus<TestBusA>.Clear<DamageEvent>();
-            EventBus<TestBusA>.Clear<ScoreEvent>();
-            EventBus<TestBusB>.Clear<DamageEvent>();
-            EventBus<TestBusB>.Clear<ScoreEvent>();
+            EventBus.Clear<DamageEvent>();
+            EventBus.Clear<ScoreEvent>();
         }
 
         [Test]
         public void Subscribe_NullHandler_ThrowsArgumentNullException()
         {
-            Assert.Throws<ArgumentNullException>(() => EventBus<TestBusA>.Subscribe<DamageEvent>(null));
+            Assert.Throws<ArgumentNullException>(() => EventBus.Subscribe<DamageEvent>(null));
         }
 
         [Test]
         public void Unsubscribe_NullHandler_ThrowsArgumentNullException()
         {
-            Assert.Throws<ArgumentNullException>(() => EventBus<TestBusA>.Unsubscribe<DamageEvent>(null));
+            Assert.Throws<ArgumentNullException>(() => EventBus.Unsubscribe<DamageEvent>(null));
         }
 
         [Test]
@@ -56,13 +54,13 @@ namespace UnityEssentials.Utilities.Tests
         {
             var received = default(DamageEvent);
             var count = 0;
-            EventBus<TestBusA>.Subscribe<DamageEvent>(evt =>
+            EventBus.Subscribe<DamageEvent>(evt =>
             {
                 received = evt;
                 count++;
             });
 
-            EventBus<TestBusA>.Publish(new DamageEvent { Amount = 42, Source = "trap" });
+            EventBus.Publish(new DamageEvent { Amount = 42, Source = "trap" });
 
             Assert.AreEqual(1, count);
             Assert.AreEqual(42, received.Amount);
@@ -72,17 +70,17 @@ namespace UnityEssentials.Utilities.Tests
         [Test]
         public void Publish_WithNoSubscribers_DoesNothing()
         {
-            Assert.DoesNotThrow(() => EventBus<TestBusA>.Publish(new DamageEvent { Amount = 1 }));
+            Assert.DoesNotThrow(() => EventBus.Publish(new DamageEvent { Amount = 1 }));
         }
 
         [Test]
         public void Publish_InvokesHandlersInSubscriptionOrder()
         {
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("first"));
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("second"));
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("third"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("first"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("second"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("third"));
 
-            EventBus<TestBusA>.Publish(new DamageEvent());
+            EventBus.Publish(new DamageEvent());
 
             CollectionAssert.AreEqual(new[] { "first", "second", "third" }, _calls);
         }
@@ -91,11 +89,11 @@ namespace UnityEssentials.Utilities.Tests
         public void Unsubscribe_StopsDelivery()
         {
             Action<DamageEvent> handler = _ => _calls.Add("handler");
-            EventBus<TestBusA>.Subscribe(handler);
+            EventBus.Subscribe(handler);
 
-            EventBus<TestBusA>.Publish(new DamageEvent());
-            EventBus<TestBusA>.Unsubscribe(handler);
-            EventBus<TestBusA>.Publish(new DamageEvent());
+            EventBus.Publish(new DamageEvent());
+            EventBus.Unsubscribe(handler);
+            EventBus.Publish(new DamageEvent());
 
             CollectionAssert.AreEqual(new[] { "handler" }, _calls);
         }
@@ -104,12 +102,12 @@ namespace UnityEssentials.Utilities.Tests
         public void Unsubscribe_KeepsTheHandlersAroundTheRemovedOne()
         {
             Action<DamageEvent> middle = _ => _calls.Add("middle");
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("first"));
-            EventBus<TestBusA>.Subscribe(middle);
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("last"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("first"));
+            EventBus.Subscribe(middle);
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("last"));
 
-            EventBus<TestBusA>.Unsubscribe(middle);
-            EventBus<TestBusA>.Publish(new DamageEvent());
+            EventBus.Unsubscribe(middle);
+            EventBus.Publish(new DamageEvent());
 
             CollectionAssert.AreEqual(new[] { "first", "last" }, _calls);
         }
@@ -117,10 +115,10 @@ namespace UnityEssentials.Utilities.Tests
         [Test]
         public void Unsubscribe_HandlerThatWasNeverSubscribed_IsNoOp()
         {
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("subscribed"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("subscribed"));
 
-            Assert.DoesNotThrow(() => EventBus<TestBusA>.Unsubscribe<DamageEvent>(_ => _calls.Add("stranger")));
-            EventBus<TestBusA>.Publish(new DamageEvent());
+            Assert.DoesNotThrow(() => EventBus.Unsubscribe<DamageEvent>(_ => _calls.Add("stranger")));
+            EventBus.Publish(new DamageEvent());
 
             CollectionAssert.AreEqual(new[] { "subscribed" }, _calls);
         }
@@ -128,18 +126,18 @@ namespace UnityEssentials.Utilities.Tests
         [Test]
         public void Unsubscribe_OnEmptyChannel_IsNoOp()
         {
-            Assert.DoesNotThrow(() => EventBus<TestBusA>.Unsubscribe<DamageEvent>(_ => _calls.Add("stranger")));
-            Assert.AreEqual(0, EventBus<TestBusA>.Channel<DamageEvent>.Handlers.Length);
+            Assert.DoesNotThrow(() => EventBus.Unsubscribe<DamageEvent>(_ => _calls.Add("stranger")));
+            Assert.AreEqual(0, EventBus.Channel<DamageEvent>.Handlers.Length);
         }
 
         [Test]
         public void Subscribe_SameDelegateTwice_InvokesItTwicePerPublish()
         {
             Action<DamageEvent> handler = _ => _calls.Add("handler");
-            EventBus<TestBusA>.Subscribe(handler);
-            EventBus<TestBusA>.Subscribe(handler);
+            EventBus.Subscribe(handler);
+            EventBus.Subscribe(handler);
 
-            EventBus<TestBusA>.Publish(new DamageEvent());
+            EventBus.Publish(new DamageEvent());
 
             CollectionAssert.AreEqual(new[] { "handler", "handler" }, _calls);
         }
@@ -148,11 +146,11 @@ namespace UnityEssentials.Utilities.Tests
         public void Unsubscribe_AfterDuplicateSubscribe_RemovesOneRegistration()
         {
             Action<DamageEvent> handler = _ => _calls.Add("handler");
-            EventBus<TestBusA>.Subscribe(handler);
-            EventBus<TestBusA>.Subscribe(handler);
+            EventBus.Subscribe(handler);
+            EventBus.Subscribe(handler);
 
-            EventBus<TestBusA>.Unsubscribe(handler);
-            EventBus<TestBusA>.Publish(new DamageEvent());
+            EventBus.Unsubscribe(handler);
+            EventBus.Publish(new DamageEvent());
 
             CollectionAssert.AreEqual(new[] { "handler" }, _calls);
         }
@@ -160,56 +158,45 @@ namespace UnityEssentials.Utilities.Tests
         [Test]
         public void Clear_RemovesEveryHandlerForThatEvent()
         {
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("damage"));
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("damage"));
-            EventBus<TestBusA>.Subscribe<ScoreEvent>(_ => _calls.Add("score"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("damage"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("damage"));
+            EventBus.Subscribe<ScoreEvent>(_ => _calls.Add("score"));
 
-            EventBus<TestBusA>.Clear<DamageEvent>();
-            EventBus<TestBusA>.Publish(new DamageEvent());
-            EventBus<TestBusA>.Publish(new ScoreEvent());
+            EventBus.Clear<DamageEvent>();
+            EventBus.Publish(new DamageEvent());
+            EventBus.Publish(new ScoreEvent());
 
-            Assert.AreEqual(0, EventBus<TestBusA>.Channel<DamageEvent>.Handlers.Length);
+            Assert.AreEqual(0, EventBus.Channel<DamageEvent>.Handlers.Length);
             CollectionAssert.AreEqual(new[] { "score" }, _calls);
         }
 
         [Test]
         public void Clear_OnEmptyChannel_IsNoOp()
         {
-            Assert.DoesNotThrow(() => EventBus<TestBusA>.Clear<DamageEvent>());
+            Assert.DoesNotThrow(() => EventBus.Clear<DamageEvent>());
         }
 
         [Test]
-        public void Publish_OnOneBus_DoesNotReachTheSameEventOnAnother()
+        public void Clear_LeavesTheOtherEventTypeSubscribed()
         {
-            EventBus<TestBusA>.Subscribe<DamageEvent>(evt => _calls.Add($"A:{evt.Amount}"));
-            EventBus<TestBusB>.Subscribe<DamageEvent>(evt => _calls.Add($"B:{evt.Amount}"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("damage"));
+            EventBus.Subscribe<ScoreEvent>(_ => _calls.Add("score"));
 
-            EventBus<TestBusA>.Publish(new DamageEvent { Amount = 1 });
-            EventBus<TestBusB>.Publish(new DamageEvent { Amount = 2 });
+            EventBus.Clear<DamageEvent>();
+            EventBus.Publish(new DamageEvent());
+            EventBus.Publish(new ScoreEvent());
 
-            CollectionAssert.AreEqual(new[] { "A:1", "B:2" }, _calls);
-        }
-
-        [Test]
-        public void Clear_OnOneBus_LeavesTheOtherBusSubscribed()
-        {
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("A"));
-            EventBus<TestBusB>.Subscribe<DamageEvent>(_ => _calls.Add("B"));
-
-            EventBus<TestBusA>.Clear<DamageEvent>();
-            EventBus<TestBusA>.Publish(new DamageEvent());
-            EventBus<TestBusB>.Publish(new DamageEvent());
-
-            CollectionAssert.AreEqual(new[] { "B" }, _calls);
+            Assert.AreEqual(1, EventBus.Channel<ScoreEvent>.Handlers.Length);
+            CollectionAssert.AreEqual(new[] { "score" }, _calls);
         }
 
         [Test]
         public void Publish_DeliversOnlyToTheMatchingEventType()
         {
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("damage"));
-            EventBus<TestBusA>.Subscribe<ScoreEvent>(_ => _calls.Add("score"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("damage"));
+            EventBus.Subscribe<ScoreEvent>(_ => _calls.Add("score"));
 
-            EventBus<TestBusA>.Publish(new ScoreEvent { Points = 3 });
+            EventBus.Publish(new ScoreEvent { Points = 3 });
 
             CollectionAssert.AreEqual(new[] { "score" }, _calls);
         }
@@ -219,11 +206,11 @@ namespace UnityEssentials.Utilities.Tests
         {
             LogAssert.Expect(LogType.Exception, new Regex(HandlerFailureMessage));
 
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("before"));
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => throw new InvalidOperationException(HandlerFailureMessage));
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("after"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("before"));
+            EventBus.Subscribe<DamageEvent>(_ => throw new InvalidOperationException(HandlerFailureMessage));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("after"));
 
-            Assert.DoesNotThrow(() => EventBus<TestBusA>.Publish(new DamageEvent()));
+            Assert.DoesNotThrow(() => EventBus.Publish(new DamageEvent()));
 
             CollectionAssert.AreEqual(new[] { "before", "after" }, _calls);
         }
@@ -234,46 +221,26 @@ namespace UnityEssentials.Utilities.Tests
             LogAssert.Expect(LogType.Exception, new Regex(HandlerFailureMessage));
             LogAssert.Expect(LogType.Exception, new Regex(HandlerFailureMessage));
 
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ =>
+            EventBus.Subscribe<DamageEvent>(_ =>
             {
                 _calls.Add("thrower");
                 throw new InvalidOperationException(HandlerFailureMessage);
             });
 
-            EventBus<TestBusA>.Publish(new DamageEvent());
-            EventBus<TestBusA>.Publish(new DamageEvent());
+            EventBus.Publish(new DamageEvent());
+            EventBus.Publish(new DamageEvent());
 
             CollectionAssert.AreEqual(new[] { "thrower", "thrower" }, _calls);
         }
 
         [Test]
-        public void ResetStatics_RestoresEveryTouchedChannelToEmpty()
+        public void Subscribe_AfterClear_WorksAgain()
         {
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("A damage"));
-            EventBus<TestBusA>.Subscribe<ScoreEvent>(_ => _calls.Add("A score"));
-            EventBus<TestBusB>.Subscribe<DamageEvent>(_ => _calls.Add("B damage"));
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("stale"));
+            EventBus.Clear<DamageEvent>();
 
-            StaticResetRegistry.ResetStatics();
-
-            Assert.AreEqual(0, EventBus<TestBusA>.Channel<DamageEvent>.Handlers.Length);
-            Assert.AreEqual(0, EventBus<TestBusA>.Channel<ScoreEvent>.Handlers.Length);
-            Assert.AreEqual(0, EventBus<TestBusB>.Channel<DamageEvent>.Handlers.Length);
-
-            EventBus<TestBusA>.Publish(new DamageEvent());
-            EventBus<TestBusA>.Publish(new ScoreEvent());
-            EventBus<TestBusB>.Publish(new DamageEvent());
-
-            CollectionAssert.IsEmpty(_calls);
-        }
-
-        [Test]
-        public void Subscribe_AfterReset_WorksAgain()
-        {
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("stale"));
-            StaticResetRegistry.ResetStatics();
-
-            EventBus<TestBusA>.Subscribe<DamageEvent>(_ => _calls.Add("fresh"));
-            EventBus<TestBusA>.Publish(new DamageEvent());
+            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("fresh"));
+            EventBus.Publish(new DamageEvent());
 
             CollectionAssert.AreEqual(new[] { "fresh" }, _calls);
         }

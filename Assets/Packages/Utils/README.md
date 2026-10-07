@@ -39,13 +39,12 @@ Log.Info(allocations.AllocatedBytes);
 public sealed class GameClock : Singleton<GameClock> { private GameClock() { } }
 var clock = GameClock.Instance;   // lazily constructed on this first access
 
-// EventBus — one channel space per bus discriminator.
-public struct GameBus : IEventBus { }
+// EventBus — one channel per event type.
 public struct EnemyKilled : IEvent { public int Score; }
 
-EventBus<GameBus>.Subscribe<EnemyKilled>(OnEnemyKilled);
-EventBus<GameBus>.Publish(new EnemyKilled { Score = 10 });
-EventBus<GameBus>.Unsubscribe<EnemyKilled>(OnEnemyKilled);
+EventBus.Subscribe<EnemyKilled>(OnEnemyKilled);
+EventBus.Publish(new EnemyKilled { Score = 10 });
+EventBus.Unsubscribe<EnemyKilled>(OnEnemyKilled);
 ```
 
 **Main thread only**, with one exception. `Timer`, `EventBus`, `SingletonComponent<T>`,
@@ -315,9 +314,8 @@ or more throws and lists their names instead of picking one.
 
 ```csharp
 public interface IEvent { }       // marker for a struct payload
-public interface IEventBus { }    // marker for a struct bus discriminator
 
-public static class EventBus<TBus> where TBus : struct, IEventBus
+public static class EventBus
 {
     public static void Subscribe<TEvent>(Action<TEvent> handler) where TEvent : struct, IEvent;
     public static void Unsubscribe<TEvent>(Action<TEvent> handler) where TEvent : struct, IEvent;
@@ -326,23 +324,22 @@ public static class EventBus<TBus> where TBus : struct, IEventBus
 }
 ```
 
-`TBus` is an empty struct used purely as a discriminator: each one closes the generic over its
-own statics, so `EventBus<GameBus>` and `EventBus<UiBus>` cannot see each other's handlers even
-for the same event type. Events are structs, so a warm publish allocates nothing.
+The event type *is* the channel: each `TEvent` closes `Channel<TEvent>` over its own statics, so
+there is no dictionary lookup on the hot path and no handler for one event ever sees another.
+Events are structs, so a warm publish allocates nothing.
 
 ```csharp
-public struct GameBus : IEventBus { }
 public struct DamageTaken : IEvent { public int Amount; }
 
 public sealed class HealthBar : MonoBehaviour
 {
-    private void OnEnable()  => EventBus<GameBus>.Subscribe<DamageTaken>(OnDamage);
-    private void OnDisable() => EventBus<GameBus>.Unsubscribe<DamageTaken>(OnDamage);
+    private void OnEnable()  => EventBus.Subscribe<DamageTaken>(OnDamage);
+    private void OnDisable() => EventBus.Unsubscribe<DamageTaken>(OnDamage);
 
     private void OnDamage(DamageTaken evt) { /* ... */ }
 }
 
-EventBus<GameBus>.Publish(new DamageTaken { Amount = 12 });
+EventBus.Publish(new DamageTaken { Amount = 12 });
 ```
 
 - Handlers run in subscription order.
@@ -350,7 +347,7 @@ EventBus<GameBus>.Publish(new DamageTaken { Amount = 12 });
   removes one registration. Unsubscribing something that was never subscribed is a no-op.
 - A handler that throws is reported through `Debug.LogException`, stays subscribed, and the
   handlers behind it still run.
-- `Clear<TEvent>()` drops every handler for that event on that bus.
+- `Clear<TEvent>()` drops every handler for that event, and leaves other event types alone.
 - `null` handler throws `ArgumentNullException`.
 
 Unsubscribing needs the same delegate you subscribed. A method group (`OnDamage` above) works
@@ -467,12 +464,11 @@ literally named `Resources`. This repo ships none on purpose — a library must 
 
 ### Domain reload resets, it does not clean up
 
-On `RuntimeInitializeOnLoadMethod(SubsystemRegistration)` every registered system clears its
-statics: cached singleton instances, all EventBus channels, the interval log counters, and the
-timer runner's active list (the running `Awaitable` loop is retired through a generation counter).
-Nothing is disposed and no
-`Completed` handler is called — entering play mode with domain reload disabled starts clean, but
-if a singleton owns a file handle or a socket, close it yourself.
+The package assumes domain reload is enabled. The reload rebuilds the domain, so every static starts
+clean on its own: cached singleton instances, all EventBus channels, the interval log counters and
+the timer runner's active list. Nothing is disposed and no `Completed` handler is called — so if a
+singleton owns a file handle or a socket, close it yourself. With domain reload disabled these
+statics survive between play-mode sessions and the package makes no attempt to clear them.
 
 ### Verified manually in play mode
 

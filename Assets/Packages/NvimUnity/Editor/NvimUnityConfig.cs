@@ -5,9 +5,8 @@ using UnityEngine;
 
 namespace NvimUnity
 {
-    //Which IGenerator NeovimScriptEditor.CreateGenerator builds. Classic = the
-    //legacy-style csproj (VS/Rider shape — verified to load fine in the Roslyn
-    //LS); SdkStyleRoslyn = RoslynProjectGenerator's modern SDK-style csproj.
+    //Which csproj style to generate: Classic is the old pre-SDK MSBuild shape, SdkStyleRoslyn
+    //is the modern <Project Sdk="..."> shape.
     public enum ProjectGeneratorType
     {
         Classic = 0,
@@ -23,11 +22,9 @@ namespace NvimUnity
 
         [Header("Generation")]
         [SerializeField] private ProjectGeneratorType m_GeneratorType = ProjectGeneratorType.Classic;
-        // SDK-style only. Empty/"auto" => mapped per assembly from its API
-        // compatibility level (net471 / netstandard2.1) by RoslynProjectGenerator.
+        // SDK-style only. Empty or "auto" picks net471 / netstandard2.1 per assembly.
         [SerializeField] private string m_TargetFramework = "";
-        // SDK-style only. Empty/"latest"/"auto" => Unity's own pinned compiler
-        // language version (never the SDK's notion of latest).
+        // SDK-style only. Empty, "latest" or "auto" uses Unity's own compiler version.
         [SerializeField] private string m_LangVersion = "";
         [SerializeField] private bool m_IncludePackages = true;
         [SerializeField] private bool m_IncludeTests = true;

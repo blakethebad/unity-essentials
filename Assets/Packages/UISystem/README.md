@@ -1,22 +1,24 @@
 # UI System
 
-A UGUI window/screen/popup/panel/widget system for Unity 6. One entry point for showing,
-hiding and navigating UI; a four-leaf element vocabulary; a ScriptableObject that
-declares what a window owns and how its canvas is built.
+A small UGUI window system for Unity 6. One entry point for showing and hiding UI, one element base
+class to derive from, and a ScriptableObject that declares what a window owns and how its canvas is
+built.
 
 - **Assembly:** `UnityEssentials.UI` (`Runtime/`) — references `UnityEngine.UI` only.
 - **Namespace:** `UnityEssentials.UI`
 - **Tests:** `UnityEssentials.UI.Tests` (EditMode only)
 
-**The consuming game writes no UI plumbing.** You author prefabs, list them in a
-`WindowData`, construct a `WindowService`, and call `ShowUI<MainMenuScreen>()`. Screen
-exclusivity, popup stacking, auto-opening panels, back navigation and history bookkeeping
-are all handled by the package.
+**You author prefabs, list them in a `WindowData`, construct a `UIService`, and call
+`ShowUI<PauseMenu>()`.** The service instantiates one instance of every listed prefab when the
+window loads and caches it by concrete type. It does **not** track which elements are open, stack
+them, or order them — that is yours to decide, which is what keeps it small enough to drop into a
+demo project and start writing UI.
 
-**v1 is deliberately narrow.** Designed-for but not built: show/hide tween animations
-(the transition hooks are the seam), widget pooling (`WidgetData` is the seam),
-Addressables/on-demand loading, multiple canvases per window. Windows always render as
-**screen-space overlay** canvases — no camera dependency of any kind.
+**Deliberately not built:** show/hide tween animations (the transition hooks are the seam),
+screen exclusivity, popup stacking, auto-opening panels, back navigation, multi-instance widgets.
+The first is a subclass away; the rest are a documented expansion path — see
+`Docs/UISystem-Trim-Plan.md`. Windows always render as **screen-space overlay** canvases, so there
+is no camera dependency of any kind.
 
 ---
 
@@ -24,75 +26,87 @@ Addressables/on-demand loading, multiple canvases per window. Windows always ren
 
 ```csharp
 using UnityEssentials.UI;
+using UnityEngine;
 
 public sealed class UIBootstrap : MonoBehaviour
 {
-    [SerializeField] private WindowData mainMenuWindow;   // created via the asset menu
+    [SerializeField] private WindowData mainWindow;   // created via the asset menu
 
-    private WindowService _ui;
+    private UIService _ui;
 
     private void Awake()
     {
-        _ui = new WindowService();
-        _ui.SwitchWindow(mainMenuWindow);   // builds everything, shows nothing
-        _ui.ShowUI<MainMenuScreen>();       // shows the first screen
+        _ui = new UIService();
+        _ui.SwitchWindow(mainWindow);   // builds everything, shows nothing
+        _ui.ShowUI<MainMenu>();         // shows one element
     }
 
-    private void OnDestroy() => _ui.CloseWindow();
+    private void OnDestroy() => _ui.Dispose();
 }
 ```
 
-1. Write your elements: `public sealed class MainMenuScreen : ScreenBase { }` (and
-   popups/panels/widgets the same way), put each on the root of its own prefab.
-2. Create the asset: **Assets ▸ Create ▸ UnityEssentials ▸ UI ▸ Window Data**, drag the
-   screen/popup/panel prefabs into **UI Prefabs** and widget prefabs into **Widgets**.
-3. Put an `EventSystem` in your scene — the package warns if one is missing but never
-   creates one (it cannot know which input module your project needs).
+1. Write an element — put it on the root of its own prefab:
+
+   ```csharp
+   public sealed class MainMenu : UIBase
+   {
+       [SerializeField] private Button playButton;
+
+       protected override void OnShow(IUIData uiData) => playButton.onClick.AddListener(Play);
+       protected override void OnHide() => playButton.onClick.RemoveListener(Play);
+   }
+   ```
+
+2. Create the asset: **Assets ▸ Create ▸ UnityEssentials ▸ UI ▸ Window Data**, and drag your
+   prefabs into **UI Prefabs**.
+3. Put an `EventSystem` in your scene — the package warns if one is missing but never creates one
+   (it cannot know which input module your project needs).
 
 A consumer wanting global access can self-register:
-`ServiceLocator.Register(new WindowService()).AsSelf();` — the package itself has **no**
-dependency on `UnityEssentials.Services`.
+`ServiceLocator.Register(new UIService()).AsSelf();` — the package itself has **no** dependency on
+`UnityEssentials.Services`.
 
 ---
 
-## The four element kinds
+## Elements
 
-Every element derives from one of exactly four bases. Screens, popups and panels root at
-`UIBase`; widgets are deliberately a **separate hierarchy** rooted at `UIWidget`, so a
-widget type can never be handed to `GetUI`/`ShowUI` — it does not compile. `Show`/`Hide`
-are `sealed` on all four leaves, so the registration each kind performs cannot be skipped
-or forgotten.
+Derive from `UIBase`. There is one element kind, so there is nothing to choose between.
 
-| | Registered in | Enters history | Exclusive | Created | Works unbound |
-|---|---|---|---|---|---|
-| `ScreenBase` | `ActiveScreen` | visible + back-trail | yes — one at a time | at window load | no |
-| `PopupBase` | `ActivePopups` | visible only | no — stacks | at window load | no |
-| `PanelBase` | `ActivePanels` | never | no | at window load | no |
-| `WidgetBase` | nothing | never | no | spawned on demand | **yes** |
+```csharp
+public sealed class SettingsPanel : UIBase
+{
+    protected override void OnShow(IUIData uiData)
+    {
+        if (uiData is SettingsData data) { ApplyTo(data); }
+    }
+}
+```
 
-- **Screens** are destinations: the main menu, the shop. Showing one supersedes the
-  previous screen and closes every open popup and panel.
-- **Popups** are transient overlays: dialogs, modals. Any number stack; the newest draws
-  on top; `Back()` closes them first.
-- **Panels** are screen composition: nav bars, currency headers. Tracked only so they can
-  be closed with the screen that owns them; invisible to navigation.
-- **Widgets** are spawned, repeatable elements: health bars, damage numbers, toasts. They
-  register with nothing and work with no window at all, which makes `WidgetBase` double as
-  a base class for any plain animated element.
+| Member | Purpose |
+|---|---|
+| `Show(IUIData uiData = null)` | Activates, runs `OnShow`, then the show transition |
+| `Hide()` | Runs `OnHide`, then the hide transition, then deactivates |
+| `State` / `IsVisible` | Where it is in the cycle; `IsVisible` is `Showing \|\| Shown` |
+| `Window` / `Service` | The owning window, and the service driving it |
+| `OnShow(IUIData)` / `OnHide()` | Your per-show setup and teardown. Must tolerate a null payload |
+| `OnShowTransition` / `OnHideTransition` | The tween seam, below |
 
-Override `OnShow(IUIData)` for per-show setup, `OnHide()` for teardown, and the transition
-hooks for animation. **Never `Awake` for per-show work**: elements are instantiated active
-at window load and immediately deactivated, so `Awake`/`OnEnable`/`OnDisable` run exactly
-once, at load — author prefabs active and let the window hide them.
+`IUIData` is an empty marker interface — the package never reads it, you pattern-match it in
+`OnShow`, and `null` is always legal.
+
+**An element must be bound to a window before it can be shown.** Binding happens automatically when
+a `UIWindow` instantiates it from a `WindowData`. Calling `Show()` on a `UIBase` you dragged into a
+scene by hand throws `UIBindingException` — use a plain `MonoBehaviour` for anything a window does
+not own. `Hide()` is deliberately silent on an unbound or already-hidden element, so teardown never
+throws.
 
 ### Element states
 
-`Hidden → Showing → Shown → Hiding → Hidden`, exposed as `element.State` and
-`element.IsVisible` (`Showing || Shown`). The state flips at the *start* of a transition;
-in v1 transitions complete synchronously, so from outside you only ever observe `Shown`
-and `Hidden`. "Hidden" physically means `SetActive(false)` — activation happens at the
-start of showing, deactivation at the end of hiding, so a future tween always runs on a
-live object.
+`Hidden → Showing → Shown → Hiding → Hidden`, exposed as `State` and `IsVisible`. The state flips at
+the *start* of a transition; transitions complete synchronously unless you override them, so from
+outside you normally only observe `Shown` and `Hidden`. "Hidden" physically means `SetActive(false)`
+— activation happens at the start of showing and deactivation at the end of hiding, so a tween
+always runs on a live object.
 
 ### The tween seam
 
@@ -104,224 +118,113 @@ protected override void OnShowTransition(Action complete)
 }
 ```
 
-The base implementations invoke `complete()` immediately — that is all that makes v1
-synchronous. An internal transition token makes a double-fired or superseded callback
-inert, and a `Show` issued during a pending hide cancels the stale hide so the element is
-never deactivated underneath a fresh show.
+The base implementations invoke `complete()` immediately — that is all that makes the default
+synchronous. An internal transition token makes a double-fired or superseded callback inert, and a
+`Show` issued during a pending hide cancels the stale hide, so the element is never left deactivated
+underneath a fresh show.
 
 ---
 
 ## Windows
 
-A **window** is the unit of loading: one `WindowData` asset, one overlay canvas, one
-instance of every listed screen/popup/panel, built in one call and destroyed in one call.
-Group prefabs by game phase (a main-menu window, an in-game HUD window) rather than
-putting the whole game's UI in one asset.
-
-```csharp
-_ui.SwitchWindow(hudWindowData);   // validates, tears down the old window, builds the new
-_ui.CloseWindow();                 // tears down; the game now has no UI
-```
-
-- **Loading shows nothing.** The idiom is always `SwitchWindow(data); ShowUI<T>();`.
-- **Validate before you build.** The entire asset is checked *before* the live window is
-  touched — a malformed asset throws and leaves the running UI fully intact.
-- **Same-asset switch is a no-op** returning the existing window.
-- **Teardown order:** popups (reverse show order), then panels (reverse), then the active
-  screen, then destroy — every element's `OnHide` runs while it is still alive.
-- **History is cleared on every switch**: `Back()` never crosses a window boundary.
-
-The window hierarchy: each service parents its windows under its own deliberately visible
-`UnityEssentials.WindowParent` object (`DontDestroyOnLoad` while playing), created on
-demand and destroyed by `CloseWindow`:
+A `WindowData` asset lists the prefabs one window owns and carries its `CanvasSettings`.
+`UIService.SwitchWindow(data)` validates the asset, tears down whatever was loaded, then builds a
+GameObject with the `Canvas`/`CanvasScaler`/`GraphicRaycaster` trio and instantiates one
+deactivated, bound instance of every listed prefab.
 
 ```
-UnityEssentials.WindowParent
-└── Window_MainMenu          RectTransform + Canvas + CanvasScaler + GraphicRaycaster + UIWindow
-    ├── MainMenuScreen       every element sits directly under the window;
-    ├── SettingsPopup        sibling order = the order authored in WindowData
-    └── NavBarPanel
+UnityEssentials.WindowParent         DontDestroyOnLoad while playing
+└── Window_MainWindow                Canvas + CanvasScaler + GraphicRaycaster + UIWindow
+    ├── MainMenu                     one instance per listed prefab, parented directly
+    ├── SettingsPanel
+    └── ConfirmDialog
 ```
 
-There are no per-kind containers: elements draw in the order the asset lists them, except
-popups, which move themselves to the last sibling on every show so the newest always draws
-on top. Spawned widgets default to the window itself; pass an explicit parent to
-`GetWidget` to place one anywhere else.
+**One prefab per concrete type.** Elements are resolved by their concrete type, so a window cannot
+hold two of the same — the validator rejects it naming both indices.
 
-Under the hood the lifecycle is three calls: `WindowData.GenerateWindow(parent)` creates
-the window GameObject with its canvas trio configured, `UIWindow.LoadWindow(service)`
-instantiates the elements and registers the widget prototypes, and
-`UIWindow.UnloadWindow()` releases everything the window loaded and destroys it.
-`SwitchWindow` orchestrates all three — call it rather than driving the window by hand.
+`SwitchWindow` validates *before* it unloads or builds anything, so a malformed asset leaves the
+live window untouched and raises no event.
 
 ---
 
 ## Showing, hiding, resolving
 
 ```csharp
-var shop = _ui.ShowUI<ShopScreen>(new ShopScreenData { Currency = 420 });
-_ui.HideUI<SettingsPopup>();
+_ui.ShowUI<MainMenu>();                       // resolve + show
+_ui.ShowUI<ShopScreen>(new ShopData(gold));   // with a payload
+_ui.HideUI<MainMenu>();
 
-var screen = _ui.GetUI<ShopScreen>();          // throws with the window's inventory on a miss
-if (_ui.TryGetUI<DebugOverlayPanel>(out var overlay)) { }   // false + null on a miss
+var menu = _ui.GetUI<MainMenu>();             // throws on a miss
+if (_ui.TryGetUI<MainMenu>(out var m)) { }    // false on a miss
 ```
 
-`IUIData` is an empty marker interface — define a small class per element that needs data
-and pattern-match it in `OnShow`. The parameter defaults to `null` everywhere
-(`Show()`, `ShowUI<T>()`), and every `OnShow` must tolerate `null`.
+Nothing is implicit. Showing a second element does not hide the first; if you want one-at-a-time
+behaviour, hide the outgoing element yourself. Showing an element that is already shown re-runs
+`OnShow` and the show transition.
 
-Two properties worth knowing:
-
-- **Element-first registration.** `myScreen.Show(data)` called directly — from a button
-  handler holding a serialized reference — updates `ActiveScreen`, the lists and the
-  history exactly as `ShowUI` does. The service is a typed convenience, not the only door.
-- **Same-screen re-show is a refresh.** `ShowUI<ShopScreen>(newData)` on the already
-  active screen re-runs only `OnShow`: no history churn, no panel flicker.
-
----
-
-## Navigation
-
-```csharp
-if (!_ui.Back())
-{
-    PromptQuit();   // false = nothing to go back to; never throws
-}
-```
-
-`Back()` closes the topmost popup if any popup is open (the screen is untouched);
-otherwise it returns to the previous screen. Repeated presses terminate: each screen step
-*truncates* the back-trail, so `A → B → C` walks back `C → B → A → false`, bounded by the
-number of distinct screens.
-
-**The history also remembers each screen's `IUIData`.** Going back re-shows the previous
-screen with the payload it was last opened with — a screen opened with `null` is restored
-with `null`, and a same-screen refresh updates the stored payload.
-
-The trail records *how the user got here*, not which screens exist:
-
-- **Superseded screens are retained** — after `A → B`, A is the previous screen.
-- **Screens closed on their own are pruned** — after `A → B` then `HideUI<B>()`, nothing
-  is visible, and the previous screen is A.
-- **Menu ping-pong dedups** — `A → B → A` leaves the trail `[B, A]`, never growing.
-
-`ShowPreviousScreen()` is the separate, deliberate restore: unlike `Back()` it works when
-nothing is visible at all (the state after closing the last screen). Two names, two
-meanings — a back press must not resurrect a screen the game deliberately closed.
-
-Also available: `HideAllPopups()` / `HideAllPanels()` (newest first; safe no-ops with no
-window), `ActiveScreen`, `PreviousScreen`, `ActivePopups`, `ActivePanels` (live,
-non-allocating views in show order).
-
----
-
-## Auto-panels
-
-A screen declares the panels that compose it; they open on every show, in declaration
-order, after the screen's `OnShow` (so they can read state it just prepared) and before
-its transition (so screen and panels animate in parallel once tweens exist).
-
-```csharp
-public sealed class MainMenuScreen : ScreenBase
-{
-    private static readonly Type[] Panels = { typeof(CurrencyPanel), typeof(NavBarPanel) };
-
-    protected override Type[] AutoPanels => Panels;   // static readonly: no per-show allocation
-
-    protected override IUIData GetAutoPanelData(Type panelType) =>
-        panelType == typeof(CurrencyPanel) ? new CurrencyData(_wallet.Balance) : null;
-}
-```
-
-Both failure modes are wiring bugs and throw: an entry that is not a `PanelBase` is a
-`WindowConfigurationException` (the declaration is wrong); a panel the active window does
-not carry is a `UIElementNotFoundException` naming both the screen and the panel (the
-prefab is missing from the `WindowData`). An override returning `null` means "no panels".
-
-Panels never outlive their screen: every screen change closes all open panels, and the
-incoming screen re-declares what it wants.
-
----
-
-## Widgets
-
-```csharp
-var damage = _ui.GetWidget<DamageNumberWidget>(null, new DamageData(1250));
-// ... later
-_ui.ReturnWidget(damage);   // hides (OnHide runs), then destroys
-```
-
-Widget prefabs live in `WindowData.Widgets` and are stored as **prototypes** — nothing is
-instantiated at load; each `GetWidget` clones one. `null` parent means the window itself;
-an explicit parent is honoured anywhere, including outside the window — the window tracks
-what it spawned and tears it all down on unload, wherever it ended up.
-
-**Every widget you get, you return.** The get/return pair exists because a pooling
-mechanism will want the instance back; in v1 returning destroys, but callers should not
-rely on that. Returning a widget the window did not spawn is a `UIBindingException`, not
-a silent destroy.
-
-Widgets are not resolvable — `GetUI<SomeWidget>()`/`ShowUI<SomeWidget>()` do not even
-compile, because `WidgetBase` roots at `UIWidget`, not `UIBase`. There is no single
-instance a window could return.
-
-Pooling is a planned addition behind these exact signatures — write `OnShow`/`OnHide` to
-fully reset the widget's visual state rather than relying on a fresh instance.
+Elements can also be driven directly — `menu.Show()` behaves identically to `_ui.ShowUI<MainMenu>()`,
+because the service does nothing beyond resolving the type.
 
 ---
 
 ## Canvas configuration
 
 Each `WindowData` carries a `CanvasSettings` describing the
-`Canvas`/`CanvasScaler`/`GraphicRaycaster` trio. The render mode is always screen-space
-overlay. Defaults: scale with screen size, 1920×1080 reference resolution, 0.5
-width/height match — sensible on every aspect ratio without touching anything.
+`Canvas`/`CanvasScaler`/`GraphicRaycaster` trio. The render mode is always screen-space overlay.
+Defaults: scale with screen size, 1920×1080 reference resolution, 0.5 width/height match — sensible
+on every aspect ratio without touching anything.
 
-Inspector numbers are clamped as you type (`OnValidate` never throws); building non-default
-settings in code goes through the serializer:
-`JsonUtility.FromJsonOverwrite("{\"sortingOrder\":7}", new CanvasSettings())` — field names
-are the property names with a lower-case initial.
+Inspector numbers are clamped as you type (`OnValidate` never throws); building non-default settings
+in code goes through the serializer:
+`JsonUtility.FromJsonOverwrite("{\"sortingOrder\":7}", new CanvasSettings())` — field names are the
+property names with a lower-case initial.
 
 ---
 
 ## Events
 
 ```csharp
-_ui.WindowSwitched += (from, to) => _cachedScreen = null;  // drop GetUI caches here
 _ui.UIShown  += element => Analytics.ScreenView(element.GetType().Name);
 _ui.UIHidden += element => { };
 ```
 
 | Event | Fires |
 |---|---|
-| `WindowSwitched(from, to)` | after a switch completes; `from` null on first load, `to` null on `CloseWindow`. Exactly once per switch. |
-| `UIShown(element)` | on entering `Shown` — i.e. when the show *transition completes*. Screens, popups and panels only; widgets are a separate process and raise nothing. |
-| `UIHidden(element)` | on entering `Hiding` — on *intent*, while the element is still visible, after the lists/history are already updated. Screens, popups and panels only. |
+| `UIShown(element)` | on entering `Shown` — when the show *transition completes*. |
+| `UIHidden(element)` | on entering `Hiding` — on *intent*, while the element is still visible. |
 
-Handler exceptions propagate; the package never swallows them.
+The two are deliberately asymmetric in timing: state flips at the start of a transition, so
+`UIHidden` tells you an element is on its way out rather than already gone. Handler exceptions
+propagate; the package never swallows them.
+
+Note that showing an already-shown element runs the full show again, so `UIShown` fires a second
+time. If you drive analytics or audio off it, treat it as "this element was shown", not "this
+element became visible", or guard on `IsVisible` before calling `ShowUI<T>` to refresh.
 
 ---
 
 ## Errors
 
-All package exceptions derive from `UIException` and signal programming or authoring
-errors — fix the wiring, do not catch and continue.
+All package exceptions derive from `UIException` and signal programming or authoring errors — fix
+the wiring, do not catch and continue.
 
 | Situation | Result |
 |---|---|
 | `SwitchWindow(null)` | `ArgumentNullException` |
 | `SwitchWindow(activeAsset)` | no-op, returns the existing window |
-| Null list entry / prefab missing its component / duplicate concrete type / prefab in the wrong list | `WindowConfigurationException` naming asset, list and index (both indices for a duplicate) |
+| Null list entry / prefab with no `UIBase` on its root / two prefabs of the same concrete type | `WindowConfigurationException` naming asset, list and index (both indices for a duplicate) |
 | `GetUI<T>` / `ShowUI<T>` / `HideUI<T>` miss | `UIElementNotFoundException` listing the types the window *does* carry |
-| A widget `Type` handed to `UIWindow.GetUI(Type)` | `UIElementNotFoundException`: widgets are spawned, not resolved — use `GetWidget<T>()` (the generic surface rejects widget types at compile time) |
-| Any resolve/show/spawn with no active window | `NoActiveWindowException` |
-| `GetWidget<T>` for an unregistered type | `UIElementNotFoundException` listing spawnable types |
-| `ReturnWidget` of a foreign widget | `UIBindingException` |
-| `Show`/`Hide` on an unbound screen/popup/panel; double-`Bind` | `UIBindingException` |
+| Any resolve or show with no active window | `NoActiveWindowException` |
+| `Show()` on an unbound element; binding one element to a second window | `UIBindingException` |
 
-Deliberately **not** errors: `Back()` with nothing to close (`false`), `Hide()` on a
-hidden element (no-op), `TryGetUI` miss (`false` + null — including before the first
-`SwitchWindow`), `HideAll*`/`CloseWindow` with nothing loaded (no-ops).
+Deliberately **not** errors: `Hide()` on a hidden or unbound element (no-op), `TryGetUI` miss
+(`false` + null, including before the first `SwitchWindow`), `CloseWindow`/`Dispose` with nothing
+loaded (no-op), disposing twice.
+
+`Dispose()` is `CloseWindow()` and is idempotent. It does not mark the service dead — a disposed
+service is reusable via a later `SwitchWindow`, which keeps it safe in test teardown and `using`
+blocks that also close explicitly.
 
 ---
 
@@ -329,41 +232,52 @@ hidden element (no-op), `TryGetUI` miss (`false` + null — including before the
 
 ### The package never creates an EventSystem
 
-An `EventSystem` needs an input module, and which one is correct depends on your input
-backend — `InputSystemUIInputModule` for the Input System package,
-`StandaloneInputModule` for legacy input. Picking wrong silently kills all UI input, so
-the package logs one warning per session and leaves it to you. Add one to your scene.
+An `EventSystem` needs an input module, and which one is correct depends on your input backend —
+`InputSystemUIInputModule` for the Input System package, `StandaloneInputModule` for legacy input.
+Picking wrong silently kills all UI input, so the package logs one warning per session and leaves it
+to you. Add one to your scene.
 
 ### `Awake` runs at window load, not at show
 
-Elements are instantiated active and immediately deactivated, so Unity's lifecycle
-messages fire once, at load. Cache component references in `Awake`; do per-show setup in
-`OnShow`, and undo it in `OnHide` (guaranteed to run before window teardown destroys
-anything).
+Elements are instantiated active and immediately deactivated, so Unity's lifecycle messages fire
+once, at load. Cache component references in `Awake`; do per-show setup in `OnShow` and undo it in
+`OnHide`, which is guaranteed to run before window teardown destroys anything.
 
-### Element draw order is authored order
+### `UIBase` is not a general-purpose animated-component base
 
-There are no per-kind containers: list prefabs in `WindowData` in the order they should
-draw, screens first. Popups manage themselves (newest on top); everything else keeps its
-authored sibling order.
+It only works bound to a window. If you want the show/hide + transition shape for something a window
+does not own, copy the pattern onto a plain `MonoBehaviour` rather than deriving from `UIBase`.
+
+### Draw order is authored order
+
+There are no per-kind containers — every element is parented directly under the window, and UGUI
+draws depth-first in hierarchy order. List prefabs in `WindowData` in the order they should draw.
+Nothing re-sorts them at runtime, so an element that must sit on top belongs last in the list, or
+call `transform.SetAsLastSibling()` yourself in `OnShow`.
+
+### Hide transitions are not awaited on teardown
+
+`SwitchWindow`/`CloseWindow` hide every visible element — so `OnHide` always runs and your
+subscriptions are released — then destroy the window. An element whose `OnHideTransition` has not
+completed synchronously is destroyed mid-transition. Only relevant once you add tweens.
 
 ### Namespace shadowing: never write `UI.`-qualified names
 
 Inside `namespace UnityEssentials.UI`, a bare `UI.Image` binds to *our* namespace, not
-`UnityEngine.UI`. Put `using UnityEngine.UI;` at the top of the file and use the bare
-type names (`Image`, `Button`). No type in this package collides with a `UnityEngine.UI`
-type name, so the usings coexist cleanly.
+`UnityEngine.UI`. Put `using UnityEngine.UI;` at the top of the file and use the bare type names
+(`Image`, `Button`). No type in this package collides with a `UnityEngine.UI` type name, so the
+usings coexist cleanly.
 
 ### Cached elements die with their window
 
-`GetUI<T>()` references are valid for the life of the window — a switch destroys them and
-builds new instances. Drop caches in a `WindowSwitched` handler.
+`GetUI<T>()` references are valid for the life of the window — a switch destroys them and builds new
+instances, so re-resolve through the service after a switch rather than holding a cache across one.
 
 ### Testing destroyed objects
 
-A destroyed Unity object is `== null` under Unity's overloaded operator but is **not** a
-null reference — `Assert.IsNull` reports it as alive. Write
-`Assert.IsTrue(widget == null)` in your own teardown tests, as this package's do.
+A destroyed Unity object is `== null` under Unity's overloaded operator but is **not** a null
+reference — `Assert.IsNull` reports it as alive. Write `Assert.IsTrue(element == null)` in your own
+teardown tests, as this package's do.
 
 ---
 
@@ -371,137 +285,103 @@ null reference — `Assert.IsNull` reports it as alive. Write
 
 ```csharp
 public interface IUIData { }
+
 public enum UIElementState : byte { Hidden = 0, Showing = 1, Shown = 2, Hiding = 3 }
 
-public class UIException : Exception { }
-public sealed class WindowConfigurationException : UIException { }
-public sealed class UIElementNotFoundException  : UIException { }
-public sealed class NoActiveWindowException     : UIException { }
-public sealed class UIBindingException          : UIException { }
+public class        UIException                  : Exception
+public sealed class WindowConfigurationException : UIException
+public sealed class UIElementNotFoundException   : UIException
+public sealed class NoActiveWindowException      : UIException
+public sealed class UIBindingException           : UIException
 
 [DisallowMultipleComponent]
 public abstract class UIBase : MonoBehaviour
 {
-    public UIElementState State { get; }
-    public bool IsVisible { get; }                     // Showing || Shown
-    public UIWindow Window { get; }                    // null until bound
-    protected WindowService Service { get; }           // reads through Window
+    public    UIElementState State     { get; }
+    public    bool           IsVisible { get; }          // Showing || Shown
+    public    UIWindow       Window    { get; }
+    protected UIService      Service   { get; }
 
-    public abstract void Show(IUIData uiData = null);
-    public abstract void Hide();
-
-    protected virtual void OnShow(IUIData uiData);
-    protected virtual void OnHide();
-    protected virtual void OnShowTransition(Action complete);   // v1: complete() immediately
-    protected virtual void OnHideTransition(Action complete);
-}
-
-public abstract class ScreenBase : UIBase
-{
-    public sealed override void Show(IUIData uiData = null);
-    public sealed override void Hide();
-    protected virtual Type[] AutoPanels { get; }                  // default: empty
-    protected virtual IUIData GetAutoPanelData(Type panelType);   // default: null
-}
-
-public abstract class PopupBase  : UIBase { /* sealed Show/Hide */ }
-public abstract class PanelBase  : UIBase { /* sealed Show/Hide */ }
-
-[DisallowMultipleComponent]
-public abstract class UIWidget : MonoBehaviour   // separate hierarchy: widgets are not UIBase
-{
-    public UIElementState State { get; }
-    public bool IsVisible { get; }                     // Showing || Shown
-    public UIWindow Window { get; }                    // null until spawned by a window
-
-    public abstract void Show(IUIData uiData = null);
-    public abstract void Hide();
+    public void Show(IUIData uiData = null);             // UIBindingException when unbound
+    public void Hide();                                  // no-op when Hidden/Hiding
 
     protected virtual void OnShow(IUIData uiData);
     protected virtual void OnHide();
-    protected virtual void OnShowTransition(Action complete);
-    protected virtual void OnHideTransition(Action complete);
-}
-
-public abstract class WidgetBase : UIWidget { /* sealed Show/Hide; no binding required */ }
-
-[Serializable]
-public sealed class WidgetData
-{
-    public WidgetData();
-    public WidgetData(GameObject prefab);
-    public GameObject Prefab { get; }
+    protected virtual void OnShowTransition(Action complete);   // base: complete()
+    protected virtual void OnHideTransition(Action complete);   // base: complete()
 }
 
 [Serializable]
 public sealed class CanvasSettings
 {
-    public CanvasSettings();   // ScaleWithScreenSize, 1920x1080, match 0.5; always overlay
-    // get-only: SortingLayerName, SortingOrder, PixelPerfect, TargetDisplay, UIScaleMode,
-    // ScaleFactor, ReferenceResolution, ScreenMatchMode, MatchWidthOrHeight,
-    // ReferencePixelsPerUnit, PhysicalUnit, FallbackScreenDPI, DefaultSpriteDPI,
-    // IgnoreReversedGraphics, BlockingObjects, BlockingMask
+    public string SortingLayerName { get; }   public int   SortingOrder  { get; }
+    public bool   PixelPerfect     { get; }   public int   TargetDisplay { get; }
+
+    public CanvasScaler.ScaleMode       UIScaleMode            { get; }
+    public float                        ScaleFactor            { get; }
+    public Vector2                      ReferenceResolution    { get; }
+    public CanvasScaler.ScreenMatchMode ScreenMatchMode        { get; }
+    public float                        MatchWidthOrHeight     { get; }
+    public float                        ReferencePixelsPerUnit { get; }
+    public CanvasScaler.Unit            PhysicalUnit           { get; }
+    public float                        FallbackScreenDPI      { get; }
+    public float                        DefaultSpriteDPI       { get; }
+
+    public bool                             IgnoreReversedGraphics { get; }
+    public GraphicRaycaster.BlockingObjects BlockingObjects        { get; }
+    public LayerMask                        BlockingMask           { get; }
 }
 
 [CreateAssetMenu(menuName = "UnityEssentials/UI/Window Data", fileName = "WindowData")]
 public sealed class WindowData : ScriptableObject
 {
-    public static WindowData Create(GameObject[] uiPrefabs, WidgetData[] widgets, CanvasSettings canvas);
-    public UIWindow GenerateWindow(Transform parent);     // canvas trio + UIWindow; loads nothing
-    public IReadOnlyList<GameObject> UIPrefabs { get; }   // screens/popups/panels only
-    public IReadOnlyList<WidgetData> Widgets { get; }
-    public CanvasSettings Canvas { get; }
+    public IReadOnlyList<GameObject> UIPrefabs { get; }
+    public CanvasSettings            Canvas    { get; }
+
+    public static WindowData Create(GameObject[] uiPrefabs, CanvasSettings canvas);
+    public UIWindow GenerateWindow(Transform parent);
 }
 
 [DisallowMultipleComponent]
-public sealed class UIWindow : MonoBehaviour     // the untyped store; the service is the typed facade
+public sealed class UIWindow : MonoBehaviour
 {
-    public WindowData Data { get; }
-    public WindowService Service { get; }
-    public Canvas Canvas { get; }
+    public WindowData            Data     { get; }
+    public UIService             Service  { get; }
+    public Canvas                Canvas   { get; }
     public IReadOnlyList<UIBase> Elements { get; }
-    public IReadOnlyList<WidgetBase> SpawnedWidgets { get; }
 
-    public void LoadWindow(WindowService service);   // instantiate elements, register prototypes
-    public void UnloadWindow();                      // release loaded references, destroy itself
-
-    public UIBase GetUI<T>() where T : UIBase;   // returns UIBase by design — cast at the service
+    public void   LoadWindow(UIService service);
+    public void   UnloadWindow();                        // hides visible elements, then destroys
+    public T      GetUI<T>() where T : UIBase;
     public UIBase GetUI(Type uiType);
-    public bool TryGetUI(Type uiType, out UIBase ui);
-    public WidgetBase GetWidget(Type widgetType, Transform parent, IUIData uiData);
-    public void ReturnWidget(WidgetBase widget);
+    public bool   TryGetUI(Type uiType, out UIBase ui);
 }
 
-public sealed class WindowService
+public sealed class UIService : IDisposable
 {
-    public WindowService();
-
-    public UIWindow ActiveWindow { get; }
+    public UIWindow   ActiveWindow     { get; }
     public WindowData ActiveWindowData { get; }
-    public bool IsWindowLoaded { get; }
-    public ScreenBase ActiveScreen { get; }
-    public ScreenBase PreviousScreen { get; }
-    public IReadOnlyList<PopupBase> ActivePopups { get; }
-    public IReadOnlyList<PanelBase> ActivePanels { get; }
+    public bool       IsWindowLoaded   { get; }
 
-    public event Action<WindowData, WindowData> WindowSwitched;   // (from, to)
-    public event Action<UIBase> UIShown;                          // on entering Shown
-    public event Action<UIBase> UIHidden;                         // on entering Hiding
+    public event Action<UIBase> UIShown;
+    public event Action<UIBase> UIHidden;
 
     public UIWindow SwitchWindow(WindowData windowData);
-    public void CloseWindow();
-
-    public T ShowUI<T>(IUIData uiData = null) where T : UIBase;
-    public void HideUI<T>() where T : UIBase;
-    public T GetUI<T>() where T : UIBase;
-    public bool TryGetUI<T>(out T ui) where T : UIBase;
-
-    public T GetWidget<T>(Transform parent = null, IUIData uiData = null) where T : WidgetBase;
-    public void ReturnWidget(WidgetBase widget);
-
-    public bool Back();                          // restores the previous screen with its stored IUIData
-    public bool ShowPreviousScreen();
-    public void HideAllPopups();
-    public void HideAllPanels();
+    public void     CloseWindow();
+    public T        ShowUI<T>(IUIData uiData = null) where T : UIBase;
+    public void     HideUI<T>()                      where T : UIBase;
+    public T        GetUI<T>()                       where T : UIBase;
+    public bool     TryGetUI<T>(out T ui)            where T : UIBase;
+    public void     Dispose();                       // == CloseWindow(), idempotent
 }
 ```
+
+---
+
+## Expanding this later
+
+`ScreenBase`/`PopupBase`/`PanelBase`, popup stacking, a navigation back-stack and multi-instance
+widgets were all removed to get here, and the remaining API is shaped so they come back as pure
+additions rather than breaking changes. `Docs/UISystem-Trim-Plan.md` records the four decisions that
+keep that door open — most importantly that a future kind-specific `Show` must be an `override` of
+`UIBase.Show`, never a `new` method, or `ShowUI<T>` will silently bypass it.

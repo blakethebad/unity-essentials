@@ -2,11 +2,6 @@ using System;
 
 namespace UnityEssentials.States
 {
-    /// <summary>
-    /// The chainable handle a machine hands to its <c>InsertTransitions</c> hook — the only way to
-    /// declare transitions. A thin façade over the manager's internal <c>Allow*</c> methods, which
-    /// keep all the validation.
-    /// </summary>
     public readonly struct Transitions<TState> where TState : struct, Enum
     {
         private readonly BaseStateManager<TState> _machine;
