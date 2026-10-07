@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -147,7 +148,25 @@ namespace UnityEssentials.UI.Tests
         /// </summary>
         protected WindowData BuildWindowData(GameObject[] uiPrefabs, CanvasSettings canvas)
         {
-            return Track(WindowData.Create(uiPrefabs, canvas));
+            var data = Track(ScriptableObject.CreateInstance<WindowData>());
+
+            SetSerializedField(data, "uiPrefabs", uiPrefabs);
+            SetSerializedField(data, "canvas", canvas ?? new CanvasSettings());
+
+            return data;
+        }
+
+        private static void SetSerializedField(WindowData data, string fieldName, object value)
+        {
+            var field = typeof(WindowData).GetField(
+                fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+
+            Assert.IsNotNull(
+                field,
+                $"WindowData has no serialized field '{fieldName}'. Renaming one breaks every authored " +
+                "asset as well as this fixture, so the rename must be deliberate.");
+
+            field.SetValue(data, value);
         }
 
         /// <summary>

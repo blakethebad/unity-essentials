@@ -9,7 +9,7 @@ namespace UnityEssentials.Utilities.Tests
 {
     /// <summary>
     /// Covers the EventBus contract: delivery and ordering, subscribe/unsubscribe bookkeeping,
-    /// duplicate subscriptions, channel isolation, handler exception containment and the reset action.
+    /// duplicate subscriptions, channel isolation and handler exception containment.
     /// </summary>
     [TestFixture]
     public class EventBusTests
@@ -234,27 +234,10 @@ namespace UnityEssentials.Utilities.Tests
         }
 
         [Test]
-        public void ResetStatics_RestoresEveryTouchedChannelToEmpty()
-        {
-            EventBus.Subscribe<DamageEvent>(_ => _calls.Add("damage"));
-            EventBus.Subscribe<ScoreEvent>(_ => _calls.Add("score"));
-
-            StaticResetRegistry.ResetStatics();
-
-            Assert.AreEqual(0, EventBus.Channel<DamageEvent>.Handlers.Length);
-            Assert.AreEqual(0, EventBus.Channel<ScoreEvent>.Handlers.Length);
-
-            EventBus.Publish(new DamageEvent());
-            EventBus.Publish(new ScoreEvent());
-
-            CollectionAssert.IsEmpty(_calls);
-        }
-
-        [Test]
-        public void Subscribe_AfterReset_WorksAgain()
+        public void Subscribe_AfterClear_WorksAgain()
         {
             EventBus.Subscribe<DamageEvent>(_ => _calls.Add("stale"));
-            StaticResetRegistry.ResetStatics();
+            EventBus.Clear<DamageEvent>();
 
             EventBus.Subscribe<DamageEvent>(_ => _calls.Add("fresh"));
             EventBus.Publish(new DamageEvent());

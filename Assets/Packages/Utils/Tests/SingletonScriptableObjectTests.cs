@@ -8,8 +8,8 @@ namespace UnityEssentials.Utilities.Tests
 {
     /// <summary>
     /// EditMode coverage for the asset-backed singleton through its seams: ResolveInstance for the
-    /// zero/one/many cases, SetInstanceForTests for injection, and the reset hook. The repo holds no
-    /// Resources folder, so the real Resources lookup is a manual play-mode check.
+    /// zero/one/many cases and SetInstanceForTests for injection. The repo holds no Resources folder,
+    /// so the real Resources lookup is a manual play-mode check.
     /// </summary>
     [TestFixture]
     public class SingletonScriptableObjectTests
@@ -19,13 +19,13 @@ namespace UnityEssentials.Utilities.Tests
         [SetUp]
         public void SetUp()
         {
-            StaticResetRegistry.ResetStatics();
+            TestSingletonAsset.SetInstanceForTests(null);
         }
 
         [TearDown]
         public void TearDown()
         {
-            StaticResetRegistry.ResetStatics();
+            TestSingletonAsset.SetInstanceForTests(null);
 
             for (var i = 0; i < _createdAssets.Count; i++)
             {
@@ -84,16 +84,6 @@ namespace UnityEssentials.Utilities.Tests
 
             Assert.IsTrue(TestSingletonAsset.HasInstance);
             Assert.AreSame(asset, TestSingletonAsset.Instance);
-        }
-
-        [Test]
-        public void ResetStatics_ClearsTheCachedInstance()
-        {
-            TestSingletonAsset.SetInstanceForTests(CreateAsset("Cached"));
-
-            StaticResetRegistry.ResetStatics();
-
-            Assert.IsFalse(TestSingletonAsset.HasInstance);
         }
 
         private TestSingletonAsset CreateAsset(string assetName)

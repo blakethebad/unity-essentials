@@ -7,12 +7,6 @@ using Debug = UnityEngine.Debug;
 
 namespace UnityEssentials.Utilities
 {
-    /// <summary>
-    /// A logger for one aspect of a project: it prefixes every message with a coloured header and
-    /// owns the palette, hashing, message composition and console dispatch behind that. Built
-    /// without a header (as <see cref="Log"/> builds it) it logs messages bare. Stripped from
-    /// release builds exactly like <see cref="Log"/>.
-    /// </summary>
     public sealed class CustomLogger
     {
         internal const string NullMessage = "Null";
@@ -44,7 +38,6 @@ namespace UnityEssentials.Utilities
 
         private readonly string _prefix;
 
-        /// <summary>Creates a logger with neither header nor colour; messages are logged bare.</summary>
         public CustomLogger()
         {
         }
@@ -150,8 +143,6 @@ namespace UnityEssentials.Utilities
             DispatchInterval(severity, message, interval, filePath, lineNumber);
         }
 
-        // CustomLogger is non-generic, so RuntimeInitializeOnLoadMethod fires on it directly and the
-        // counters need no StaticResetRegistry entry.
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void ResetIntervalCounts()
         {
@@ -180,8 +171,6 @@ namespace UnityEssentials.Utilities
 
         internal static string ToHex(Color color)
         {
-            // Round rather than truncate: Unity's Color to Color32 conversion floors, which turns an
-            // exact palette entry such as 210 into 209 after the round trip through Color.
             var r = (byte)Mathf.Clamp(Mathf.RoundToInt(color.r * 255f), 0, 255);
             var g = (byte)Mathf.Clamp(Mathf.RoundToInt(color.g * 255f), 0, 255);
             var b = (byte)Mathf.Clamp(Mathf.RoundToInt(color.b * 255f), 0, 255);
@@ -201,8 +190,6 @@ namespace UnityEssentials.Utilities
                 body = "<color=#" + CriticalColorHex + ">" + body + "</color>";
             }
 
-            // A null prefix concatenates as empty and String.Concat hands back the body itself, so
-            // a header-less logger pays no allocation for the join.
             return prefix + body;
         }
 
@@ -227,13 +214,10 @@ namespace UnityEssentials.Utilities
             }
         }
 
-        // Counts are keyed by call site alone and shared by every logger instance, so one log
-        // statement owns one counter. Storing (count + 1) % interval keeps the first call at a site
-        // logging, every interval-th call after it logging, and the stored value bounded.
         private void DispatchInterval(
             LogSeverity severity, object message, int interval, string filePath, int lineNumber)
         {
-            StaticResetRegistry.AssertMainThread();
+            MainThreadGuard.AssertMainThread();
 
             if (interval <= 0)
             {

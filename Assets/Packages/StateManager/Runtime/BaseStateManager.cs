@@ -3,23 +3,10 @@ using System.Collections.Generic;
 
 namespace UnityEssentials.States
 {
-    /// <summary>
-    /// A finite state machine keyed by your own enum: a derived manager registers its states in
-    /// <see cref="OnInitialize"/>, each with the moves it allows, then <see cref="Initialize"/>
-    /// seals it and <see cref="ChangeState"/> and <see cref="Tick"/> drive it. Plain C# — no Unity
-    /// types, no scene dependency.
-    /// </summary>
     public abstract partial class BaseStateManager<TState> : IStateManager<TState> where TState : struct, Enum
     {
-        // ---- Fields -------------------------------------------------------
-
         private readonly Dictionary<TState, BaseState<TState>> _states = new Dictionary<TState, BaseState<TState>>();
-
         private readonly TransitionTable<TState> _transitions = new TransitionTable<TState>();
-
-        // Pairs declared through AddState, held until every state has been registered: a state may
-        // legally name a destination that OnInitialize has not reached yet, so they cannot be
-        // validated against _states at the moment they are declared.
         private readonly List<(TState from, TState to)> _declaredTransitions = new List<(TState from, TState to)>();
 
         private TState? _initialState;
@@ -29,108 +16,66 @@ namespace UnityEssentials.States
         private BaseState<TState> _previousState;
         private TState? _previousStateType;
 
-        // The manager states are attached to; null means this machine. A host that only delegates to
-        // this engine — StateManagerBehaviour — sets itself here so states see the host as their
-        // manager instead of the hidden machine behind it.
         private IStateManager<TState> _attachOwner;
 
         private bool _isInitialized;
-
-        // Set while the configuration hooks run, so an Initialize() call made from inside one is a
-        // loud exception rather than a half-configured machine.
         private bool _configuring;
-
-        // Set while hooks and events for a transition, the initial entry or a restart are running.
-        // Everything that would mutate the machine checks it: a ChangeState made under it is either
-        // deferred (entry half) or a loud exception (everywhere else), never corrupted state.
         private bool _transitioning;
-
-        // Set for the entry half of a transition — the entry hook and StateEntered — which is the
-        // only window where a nested ChangeState is legal. By then the swap has happened, so the
-        // requester's own state is what the deferred change validates against.
         private bool _entering;
 
-        // The single change deferred from the entry half of the transition in flight, performed by
-        // RunDeferredChanges once that transition has completed.
         private TState? _pendingState;
 
-        // Deferred changes chaining into each other run inside one ChangeState or Initialize call,
-        // so a cycle of states deferring forever would hang the frame; this turns it into an exception.
         private const int MaxDeferredChanges = 100;
 
-        // ---- Editor hooks -------------------------------------------------
-
-        // A partial method with no implementing part is erased by the compiler along with every call
-        // to it, so outside UNITY_EDITOR this declaration and the call in Initialize both vanish.
         partial void DebugRegister();
-
-        // ---- Properties ---------------------------------------------------
 
         public bool IsInitialized => _isInitialized;
 
         public TState CurrentStateType => _currentState == null ? default : _currentState.StateType;
-
         public BaseState<TState> CurrentState => _currentState;
 
         public TState? PreviousStateType => _previousStateType;
-
         public BaseState<TState> PreviousState => _previousState;
 
-        // ---- Events -------------------------------------------------------
-
-        /// <summary>
-        /// Raised after the old state's exit hook and before the swap, so <see cref="CurrentStateType"/>
-        /// still reports the state being left. Arguments are <c>(from, to)</c>.
-        /// </summary>
         public event Action<TState, TState> StateExited;
-
-        /// <summary>
-        /// Raised after the new state's entry hook, once the transition is complete. Arguments are
-        /// <c>(from, to)</c>; on the initial entry both are the initial state.
-        /// </summary>
         public event Action<TState, TState> StateEntered;
 
-        // ---- Hosting ------------------------------------------------------
-
-        // Redirects state ownership to a host that wraps this machine. Must be called before any
-        // AddState, i.e. from the host's constructor.
         internal void SetAttachOwner(IStateManager<TState> owner)
         {
             _attachOwner = owner;
         }
 
-        // ---- Runtime ------------------------------------------------------
-
-        /// <summary>
-        /// Runs the configuration hooks, seals the machine and enters the state chosen by
-        /// <see cref="GetInitialState"/> — bypassing the transition table, and firing no exit events.
-        /// </summary>
+        /// <summary>Runs the configuration hooks, seals the machine and enters the state <see cref="GetInitialState"/> picks.</summary>
         public void Initialize()
         {
             if (_isInitialized)
-            {
                 throw new StateConfigurationException(
                     "This BaseStateManager is already initialized. Initialize() may only be called once.");
-            }
 
             if (_configuring)
-            {
                 throw new StateConfigurationException(
                     "Initialize() was called from inside OnInitialize() or InsertTransitions(). " +
                     "Configuration hooks must only configure the machine.");
-            }
 
-            // Hook failures propagate unchanged and leave the machine uninitialized, so a manager
-            // that throws while configuring is still a configurable machine.
             _configuring = true;
             try
             {
                 OnInitialize();
 
-                // Only now is the state set complete, so this is the first point where the pairs
-                // AddState collected can be checked against it.
-                ApplyDeclaredTransitions();
-                InsertTransitions(new Transitions<TState>(this));
+				for (var i = 0; i < _declaredTransitions.Count; i++)
+				{
+					var (from, to) = _declaredTransitions[i];
+					if (!_states.ContainsKey(to))
+					{
+						throw new StateConfigurationException(
+							$"AddState('{from}') lists '{to}' as an available transition, but no state is registered for it. " +
+							"Register it with AddState() from OnInitialize(), or drop it from the list.");
+					}
+
+					_transitions.Allow(from, to);
+				}
+
+				_declaredTransitions.Clear();
             }
             finally
             {
@@ -138,28 +83,20 @@ namespace UnityEssentials.States
             }
 
             if (_states.Count == 0)
-            {
                 throw new StateConfigurationException(
                     "Cannot initialize a BaseStateManager with no states. Register at least one state with AddState() from OnInitialize().");
-            }
 
             var initial = GetInitialState();
             if (!_states.TryGetValue(initial, out var state))
-            {
                 throw new StateConfigurationException(
                     $"GetInitialState() returned '{initial}', which is not registered. " +
                     "Register it with AddState(), or return a registered state from the override.");
-            }
 
             _isInitialized = true;
             _currentState = state;
 
-            // Editor-only, and compiled away entirely in players. Placed before the guarded entry
-            // below so the debug entry's subscription observes the initial StateEntered.
             DebugRegister();
 
-            // Stage literals are interned, so tracking them costs nothing on the success path;
-            // the message is only ever built inside the catch.
             var stage = "initial EnterState";
 
             _transitioning = true;
@@ -173,8 +110,6 @@ namespace UnityEssentials.States
             }
             catch (Exception inner)
             {
-                // A change deferred by the failed entry dies with it, or it would run out of
-                // nowhere on the next unrelated call.
                 _pendingState = null;
                 throw new StateManagerException(
                     $"{stage} failed while entering the initial state '{initial}'. " +
@@ -187,24 +122,15 @@ namespace UnityEssentials.States
                 _entering = false;
             }
 
-            // A change the initial entry deferred runs now, as an ordinary transition with the full
-            // exit/enter sequence and events — its failures are its own, not the initial entry's.
             RunDeferredChanges();
         }
 
-        /// <summary>
-        /// Transitions to <paramref name="nextState"/>: validate, exit hook, <see cref="StateExited"/>,
-        /// swap, entry hook, <see cref="StateEntered"/>. A rejected call leaves the machine untouched.
-        /// Called from the entry half of a transition — <c>EnterState</c> or a <see cref="StateEntered"/>
-        /// handler — the change is deferred and performed as soon as that transition completes.
-        /// </summary>
+        /// <summary>Transitions to <paramref name="nextState"/>: validate, exit, swap, enter. A rejected call changes nothing.</summary>
         public void ChangeState(TState nextState)
         {
             if (!_isInitialized)
-            {
                 throw new StateConfigurationException(
                     "ChangeState is not available until the machine is initialized. Call Initialize() after configuring it.");
-            }
 
             if (_transitioning)
             {
@@ -216,46 +142,34 @@ namespace UnityEssentials.States
             RunDeferredChanges();
         }
 
-        // Records a change requested from the entry half of a transition. The swap has already made
-        // the requester's state current, so the request validates exactly like a top-level call —
-        // failures point at the call site, not at the drain loop that would have performed it.
         private void DeferChangeState(TState nextState)
         {
             if (!_entering)
-            {
                 throw new StateManagerException(
                     "ChangeState() was called during the exit half of a transition or during a restart. " +
                     "A follow-up change may be requested from EnterState or a StateEntered handler — it is " +
                     "performed once the transition completes — but not from ExitState, RestartState or a " +
                     "StateExited handler.");
-            }
 
             if (_pendingState != null)
-            {
                 throw new StateManagerException(
                     $"ChangeState('{nextState}') was called while a change to '{_pendingState}' was already deferred. " +
                     "Only one follow-up change may be requested per transition.");
-            }
 
             if (!_states.ContainsKey(nextState))
-            {
                 throw new StateConfigurationException(
                     $"Cannot change to '{nextState}' because no state is registered for it. " +
                     "Register it with AddState() before initializing the machine.");
-            }
 
             var from = _currentState.StateType;
             if (!_transitions.IsAllowed(from, nextState))
-            {
                 throw new InvalidTransitionException(
                     $"Transition from '{from}' to '{nextState}' is not allowed. " +
                     $"Add '{nextState}' to the available transitions of AddState({from}, ...) in OnInitialize().");
-            }
 
             _pendingState = nextState;
         }
 
-        // Performs changes deferred while a transition ran, each of which may defer the next.
         private void RunDeferredChanges()
         {
             var performed = 0;
@@ -276,7 +190,6 @@ namespace UnityEssentials.States
             }
         }
 
-        // One full transition: validate, exit hook, StateExited, swap, entry hook, StateEntered.
         private void PerformChangeState(TState nextState)
         {
             if (!_states.TryGetValue(nextState, out var target))
@@ -295,8 +208,6 @@ namespace UnityEssentials.States
                     $"Add '{nextState}' to the available transitions of AddState({from}, ...) in OnInitialize().");
             }
 
-            // Stage literals are interned, so tracking them costs nothing on the success path;
-            // the message is only ever built inside the catch.
             var stage = "ExitState hook";
 
             _transitioning = true;
@@ -307,8 +218,8 @@ namespace UnityEssentials.States
                 stage = "StateExited handler";
                 StateExited?.Invoke(from, nextState);
 
-                // The swap sits between the two halves so exit observers see the state being left
-                // and entry observers see a completed transition.
+                // The swap sits between the two halves so exit observers see the state being left and
+                // entry observers see a completed transition.
                 _previousState = previous;
                 _previousStateType = from;
                 _currentState = target;
@@ -322,8 +233,8 @@ namespace UnityEssentials.States
             }
             catch (Exception inner)
             {
-                // A change deferred by the failed entry dies with it, or it would run out of
-                // nowhere on the next unrelated call.
+                // A change deferred by the failed entry dies with it, or it would run out of nowhere
+                // on the next unrelated call.
                 _pendingState = null;
                 throw new StateManagerException(
                     $"{stage} failed while changing state from '{from}' to '{nextState}'. " +
@@ -337,10 +248,7 @@ namespace UnityEssentials.States
             }
         }
 
-        /// <summary>
-        /// Re-runs the current state through <see cref="BaseState{TState}.RestartState"/>. Not a
-        /// transition: the table is bypassed, no events fire, current and previous stay as they are.
-        /// </summary>
+        /// <summary>Re-runs the current state in place. Not a transition: no table check, no events, no previous update.</summary>
         public void RestartState()
         {
             if (!_isInitialized)
@@ -377,90 +285,55 @@ namespace UnityEssentials.States
             }
         }
 
-        /// <summary>
-        /// Pumps one frame of the current state's update hook. Calling <see cref="ChangeState"/> from
-        /// there is legal — the guard is deliberately not held — and update failures are not wrapped.
-        /// </summary>
+        /// <summary>Pumps one frame of the current state's update hook, from which <see cref="ChangeState"/> is legal.</summary>
         public void Tick()
         {
             if (!_isInitialized)
-            {
                 throw new StateConfigurationException(
                     "Tick is not available until the machine is initialized. Call Initialize() after configuring it.");
-            }
+            
 
             if (_transitioning)
-            {
                 throw new StateManagerException(
                     "Tick() was called while a transition was already in progress. " +
                     "Ticking cannot be nested inside EnterState, ExitState, RestartState or an event handler.");
-            }
+            
 
             var state = _currentState;
             state.UpdateState();
         }
 
-        /// <summary>
-        /// Reports whether the transition table permits a pair. A pure query: it ignores the current
-        /// state, ignores whether the machine is initialized, and never throws.
-        /// </summary>
+        /// <summary>Reports whether the transition table permits a pair. A pure query that never throws.</summary>
         public bool CanChangeState(TState from, TState to)
         {
             return _transitions.IsAllowed(from, to);
         }
 
-        // ---- Configuration ------------------------------------------------
-
-        /// <summary>
-        /// Registers this machine's states with <see cref="AddState"/> — each with the states it may
-        /// move to — and optionally picks the starting one with <see cref="SetInitialState"/>.
-        /// Called once by <see cref="Initialize"/>.
-        /// </summary>
+        /// <summary>Registers this machine's states and their moves. Called once by <see cref="Initialize"/>.</summary>
         protected abstract void OnInitialize();
 
-        /// <summary>
-        /// Declares moves that <see cref="AddState"/> did not cover — the escape hatches
-        /// <c>AllowAny</c> and late additions. Optional; called once by <see cref="Initialize"/>.
-        /// </summary>
-        protected virtual void InsertTransitions(in Transitions<TState> transitions)
-        {
-        }
-
-        /// <summary>
-        /// Registers a state under <paramref name="stateType"/>, takes ownership of it and declares
-        /// the states it may move to. The first state registered is the default initial state.
-        /// </summary>
+        /// <summary>Registers a state and the moves it allows; the first one registered is the default initial state.</summary>
         public IStateManager<TState> AddState(
             TState stateType,
             BaseState<TState> state,
             IReadOnlyList<TState> availableTransitions = null)
         {
             if (state == null)
-            {
                 throw new ArgumentNullException(nameof(state));
-            }
 
             if (_isInitialized)
-            {
                 throw new StateConfigurationException(
                     "AddState() cannot be called after Initialize(). Configure the machine completely, then initialize it.");
-            }
 
             if (_states.ContainsKey(stateType))
-            {
                 throw new StateConfigurationException(
                     $"A state is already registered for '{stateType}'. Register one state instance per enum value.");
-            }
 
-            // Attach before the dictionary, so a rejected registration leaves the state unowned and
-            // reusable rather than half-registered under a key nothing can reach.
             state.Attach(_attachOwner ?? this, stateType);
             _states.Add(stateType, state);
 
             if (_firstRegistered == null)
-            {
                 _firstRegistered = stateType;
-            }
 
             if (availableTransitions != null)
             {
@@ -473,47 +346,19 @@ namespace UnityEssentials.States
             return this;
         }
 
-        // Replays the pairs AddState collected once every state is registered, so each destination
-        // can be checked against the finished set. Failures name the AddState call that declared it.
-        private void ApplyDeclaredTransitions()
-        {
-            for (var i = 0; i < _declaredTransitions.Count; i++)
-            {
-                var (from, to) = _declaredTransitions[i];
-                if (!_states.ContainsKey(to))
-                {
-                    throw new StateConfigurationException(
-                        $"AddState('{from}') lists '{to}' as an available transition, but no state is registered for it. " +
-                        "Register it with AddState() from OnInitialize(), or drop it from the list.");
-                }
-
-                _transitions.Allow(from, to);
-            }
-
-            _declaredTransitions.Clear();
-        }
-
-        // The three declaration paths behind Transitions<TState>, internal so InsertTransitions is
-        // the only way user code can reach the table.
         internal void AllowTransition(TState from, TState to)
         {
             if (_isInitialized)
-            {
                 throw new StateConfigurationException(
                     "Transitions cannot be declared after Initialize(). Declare them inside InsertTransitions().");
-            }
 
             if (!_states.ContainsKey(from))
-            {
                 throw new StateConfigurationException(
                     $"Allow() refers to '{from}', which is not registered. Add it with AddState() from OnInitialize() first.");
-            }
 
             if (!_states.ContainsKey(to))
-            {
                 throw new StateConfigurationException(
                     $"Allow() refers to '{to}', which is not registered. Add it with AddState() from OnInitialize() first.");
-            }
 
             _transitions.Allow(from, to);
         }
@@ -521,36 +366,26 @@ namespace UnityEssentials.States
         internal void AllowTransitions(TState from, params TState[] to)
         {
             if (_isInitialized)
-            {
                 throw new StateConfigurationException(
                     "Transitions cannot be declared after Initialize(). Declare them inside InsertTransitions().");
-            }
 
             if (to == null)
-            {
                 throw new ArgumentNullException(nameof(to));
-            }
 
             if (to.Length == 0)
-            {
                 throw new StateConfigurationException(
                     $"Allow('{from}') was called without any destination states. " +
                     "Pass at least one target, or drop the call.");
-            }
 
             if (!_states.ContainsKey(from))
-            {
                 throw new StateConfigurationException(
                     $"Allow() refers to '{from}', which is not registered. Add it with AddState() from OnInitialize() first.");
-            }
 
             for (var i = 0; i < to.Length; i++)
             {
                 if (!_states.ContainsKey(to[i]))
-                {
                     throw new StateConfigurationException(
                         $"Allow() refers to '{to[i]}', which is not registered. Add it with AddState() from OnInitialize() first.");
-                }
 
                 _transitions.Allow(from, to[i]);
             }
@@ -559,50 +394,30 @@ namespace UnityEssentials.States
         internal void AllowAnyTransition()
         {
             if (_isInitialized)
-            {
                 throw new StateConfigurationException(
                     "Transitions cannot be declared after Initialize(). Declare them inside InsertTransitions().");
-            }
 
             _transitions.AllowAll();
         }
 
-        /// <summary>
-        /// Chooses the state <see cref="Initialize"/> enters. Optional — without it the first state
-        /// passed to <see cref="AddState"/> is used, and the last call wins.
-        /// </summary>
+        /// <summary>Chooses the state <see cref="Initialize"/> enters, overriding the first-registered default.</summary>
         public IStateManager<TState> SetInitialState(TState state)
         {
             if (_isInitialized)
-            {
                 throw new StateConfigurationException(
                     "SetInitialState() cannot be called after Initialize(). Configure the machine completely, then initialize it.");
-            }
 
             if (!_states.ContainsKey(state))
-            {
                 throw new StateConfigurationException(
                     $"SetInitialState() refers to '{state}', which is not registered. Add it with AddState() first.");
-            }
 
             _initialState = state;
             return this;
         }
 
-        // The stock choice, kept reachable so a host that overrides GetInitialState can fall back to
-        // it without recursing through its own override.
-        internal TState DefaultInitialState()
-        {
-            return _initialState ?? _firstRegistered.Value;
-        }
+        internal TState DefaultInitialState() => _initialState ?? _firstRegistered.Value;
 
-        /// <summary>
-        /// Decides which state <see cref="Initialize"/> enters. The default honours
-        /// <see cref="SetInitialState"/> and otherwise falls back to the first state registered.
-        /// </summary>
-        protected virtual TState GetInitialState()
-        {
-            return DefaultInitialState();
-        }
+        /// <summary>Decides which state <see cref="Initialize"/> enters; the default honours <see cref="SetInitialState"/>.</summary>
+        protected virtual TState GetInitialState() => DefaultInitialState();
     }
 }

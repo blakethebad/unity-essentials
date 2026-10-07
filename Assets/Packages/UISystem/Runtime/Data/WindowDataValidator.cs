@@ -4,11 +4,6 @@ using UnityEngine;
 
 namespace UnityEssentials.UI
 {
-    /// <summary>
-    /// Every check the prefab list of a <see cref="WindowData"/> must pass before a window can be
-    /// built from it. Takes a plain list so the rules can be tested without a ScriptableObject;
-    /// messages name the asset, the list and the index so they are actionable from a build log.
-    /// </summary>
     internal static class WindowDataValidator
     {
         private const string UIPrefabsList = "UI Prefabs";

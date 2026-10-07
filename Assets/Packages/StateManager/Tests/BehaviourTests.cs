@@ -5,31 +5,23 @@ using UnityEngine;
 namespace UnityEssentials.States.Tests
 {
     /// <summary>
-    /// Covers <see cref="StateManagerBehaviour{TState}"/>: the Unity lifecycle wiring (configure and
-    /// initialize in <c>Start</c>, tick in <c>Update</c>), every member that forwards to the hosted
-    /// machine, and the typed-manager surface a state authored against the behaviour sees.
+    /// Covers <see cref="StateManagerBehaviour{TState}"/>: the Unity lifecycle wiring, every member
+    /// that forwards to the hosted machine, and the typed-manager surface. EditMode gives no player
+    /// loop, so the hosts' <c>Invoke*</c> methods drive Awake/Start/Update by hand.
     /// </summary>
     [TestFixture]
     public class BehaviourTests
     {
-        // EditMode gives no player loop, so the hosts' Invoke* methods drive Awake/Start/Update by
-        // hand — also the only way to stop between Awake and Start. Delegation tests assert against
-        // the hosted machine: an adapter keeping its own copy would pass a behaviour-only assertion.
-
-        // ---- Fixture plumbing ---------------------------------------------
-
         // EditMode tests share one scene for the whole run, so leaked hosts would accumulate across
         // the fixture and outlive it.
         private readonly List<GameObject> _hosts = new List<GameObject>();
 
-        /// <summary>Empties the shared <see cref="CallLog"/> before the host under test is built.</summary>
         [SetUp]
         public void SetUp()
         {
             CallLog.Clear();
         }
 
-        /// <summary>Destroys every host created by the test that just ran.</summary>
         [TearDown]
         public void TearDown()
         {
@@ -70,12 +62,6 @@ namespace UnityEssentials.States.Tests
             CallLog.Record($"Handler:Exited:{from}:to:{to}");
         }
 
-        // ---- Lifecycle -----------------------------------------------------
-
-        /// <summary>
-        /// The full <c>Awake</c> + <c>Start</c> pair leaves the machine initialized and sitting on
-        /// the configured initial state, with exactly one entry hook run.
-        /// </summary>
         [Test]
         public void Behaviour_AfterAwakeAndStart_IsInitializedInInitialState()
         {
@@ -88,15 +74,11 @@ namespace UnityEssentials.States.Tests
             Assert.AreEqual(TestState.A, host.CurrentStateType);
 
             // Initialize is not a transition: it enters with the initial state as its own "previous"
-            // and leaves PreviousStateType null, which is how a state detects the very first entry.
+            // and leaves PreviousStateType null.
             CollectionAssert.AreEqual(new[] { "Enter:A:from:A" }, CallLog.Entries);
             Assert.IsNull(host.PreviousStateType);
         }
 
-        /// <summary>
-        /// Stopping after <c>Awake</c> leaves an unconfigured, uninitialized machine, whose forwarded
-        /// properties answer with their pre-initialization values instead of throwing.
-        /// </summary>
         [Test]
         public void Behaviour_AfterAwakeOnly_IsNotConfiguredOrInitialized()
         {
@@ -108,32 +90,27 @@ namespace UnityEssentials.States.Tests
             Assert.IsNotNull(host.MachineForTests);
             CollectionAssert.IsEmpty(CallLog.Entries);
 
-            // Configuration happens inside Initialize(), so the machine Awake leaves behind has no
-            // states and an empty transition table: the pair Start will open is still closed.
+            // Configuration happens inside Initialize(), so the pair Start will open is still closed.
             Assert.IsFalse(host.CanChangeState(TestState.A, TestState.B));
 
             // Null is what actually proves no state was entered: this host's initial state is A,
-            // which is also default(TestState), so the enum-default answer alone would not.
+            // which is also default(TestState).
             Assert.IsNull(host.CurrentState);
             Assert.AreEqual(default(TestState), host.CurrentStateType);
         }
 
-        /// <summary>
-        /// Subscribing before <c>Awake</c> is legal and effective: the machine is built in the
-        /// constructor, so a handler attached from another component's <c>Awake</c> — which may run
-        /// first — still observes the initial entry raised by <c>Start</c>.
-        /// </summary>
         [Test]
         public void Behaviour_BeforeAwake_EventSubscriptionDoesNotThrow()
         {
             var host = CreateHost();
 
+            // The machine is built in the constructor, so a handler attached from another
+            // component's Awake — which may run first — still observes the initial entry.
             Assert.DoesNotThrow(() => host.StateEntered += RecordEntered);
 
             host.InvokeAwake();
             host.InvokeStart();
 
-            // Both arguments are the initial state, and the event trails the state's own hook.
             CollectionAssert.AreEqual(
                 new[] { "Enter:A:from:A", "Handler:Entered:A:to:A" },
                 CallLog.Entries);
@@ -141,10 +118,6 @@ namespace UnityEssentials.States.Tests
             host.StateEntered -= RecordEntered;
         }
 
-        /// <summary>
-        /// <c>Start</c> initializes the very machine the behaviour hosts rather than a fresh one, and
-        /// each host owns a separate machine.
-        /// </summary>
         [Test]
         public void Behaviour_Start_InitializesOwnHostedMachine()
         {
@@ -156,14 +129,14 @@ namespace UnityEssentials.States.Tests
             host.InvokeAwake();
             host.InvokeStart();
 
-            // Same instance before and after: Start configured and initialized the machine built by
-            // the constructor, in place, instead of replacing it.
+            // Same instance before and after: Start configured the machine built by the constructor
+            // in place, instead of replacing it.
             Assert.AreSame(machine, host.MachineForTests);
             Assert.IsTrue(machine.IsInitialized);
             Assert.AreEqual(TestState.A, machine.CurrentStateType);
 
             // A shared machine would make two hosts fight over one state registry, and the second
-            // Start would throw on duplicate registration rather than initialize cleanly.
+            // Start would throw on duplicate registration.
             var other = CreateHost();
             other.InvokeAwake();
             other.InvokeStart();
@@ -172,12 +145,6 @@ namespace UnityEssentials.States.Tests
             Assert.IsTrue(other.IsInitialized);
         }
 
-        // ---- Ticking -------------------------------------------------------
-
-        /// <summary>
-        /// <c>Update</c> pumps the machine once per call, and follows the machine when the current
-        /// state changes rather than the state it started on.
-        /// </summary>
         [Test]
         public void Behaviour_Update_TicksCurrentState()
         {
@@ -185,7 +152,6 @@ namespace UnityEssentials.States.Tests
             host.InvokeAwake();
             host.InvokeStart();
 
-            // Drop the initial entry so the remaining entries are the ticks and nothing else.
             CallLog.Clear();
 
             host.InvokeUpdate();
@@ -201,17 +167,12 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.AreEqual(new[] { "Update:B" }, CallLog.Entries);
         }
 
-        /// <summary>
-        /// <c>Update</c> is inert until the machine is initialized, before and after <c>Awake</c>
-        /// alike, which is what lets a subclass override <c>Start</c> and initialize later.
-        /// </summary>
         [Test]
         public void Behaviour_Update_BeforeInitialize_DoesNothing()
         {
             var host = CreateHost();
 
-            // An unguarded forward to Tick() would throw StateConfigurationException here, so the
-            // calls themselves are half the assertion.
+            // An unguarded forward to Tick() would throw here, so the calls are half the assertion.
             host.InvokeUpdate();
             host.InvokeAwake();
             host.InvokeUpdate();
@@ -220,12 +181,6 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.IsEmpty(CallLog.Entries);
         }
 
-        // ---- Delegating members --------------------------------------------
-
-        /// <summary>
-        /// <c>ChangeState</c> moves the hosted machine itself, running the real transition sequence,
-        /// and lets the machine's rejections through unchanged.
-        /// </summary>
         [Test]
         public void Behaviour_ChangeState_DelegatesToMachine()
         {
@@ -244,10 +199,6 @@ namespace UnityEssentials.States.Tests
             Assert.Throws<StateConfigurationException>(() => host.ChangeState(TestState.D));
         }
 
-        /// <summary>
-        /// <c>RestartState</c> runs the machine's restart, which is an exit/enter pair against the
-        /// current state and leaves current/previous untouched.
-        /// </summary>
         [Test]
         public void Behaviour_RestartState_DelegatesToMachine()
         {
@@ -270,10 +221,6 @@ namespace UnityEssentials.States.Tests
             Assert.Throws<StateConfigurationException>(() => uninitialized.RestartState());
         }
 
-        /// <summary>
-        /// The behaviour's current/previous properties read straight through to the machine, both
-        /// before the first transition (previous is null) and after one.
-        /// </summary>
         [Test]
         public void Behaviour_CurrentAndPreviousProperties_MirrorMachine()
         {
@@ -298,10 +245,6 @@ namespace UnityEssentials.States.Tests
             Assert.AreSame(machine.PreviousState, host.PreviousState);
         }
 
-        /// <summary>
-        /// <c>CanChangeState</c> answers from the machine's transition table, including for the pairs
-        /// the table closes: reverse-only, self-transition and unregistered-state.
-        /// </summary>
         [Test]
         public void Behaviour_CanChangeState_DelegatesToMachine()
         {
@@ -328,12 +271,6 @@ namespace UnityEssentials.States.Tests
                 host.CanChangeState(TestState.A, TestState.A));
         }
 
-        // ---- Event forwarding ----------------------------------------------
-
-        /// <summary>
-        /// A handler added through the behaviour lands on the machine's own <c>StateEntered</c> —
-        /// proved by transitioning the machine directly — and removing it reaches the machine too.
-        /// </summary>
         [Test]
         public void Behaviour_StateEntered_ForwardsMachineEvent()
         {
@@ -344,9 +281,9 @@ namespace UnityEssentials.States.Tests
 
             host.StateEntered += RecordEntered;
 
+            // Transitioning the machine directly is what proves the handler landed on the machine.
             host.MachineForTests.ChangeState(TestState.B);
 
-            // Entered trails the new state's own hook, and carries (from, to).
             CollectionAssert.AreEqual(
                 new[] { "Exit:A:to:B", "Enter:B:from:A", "Handler:Entered:A:to:B" },
                 CallLog.Entries);
@@ -359,10 +296,6 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.AreEqual(new[] { "Exit:B:to:A", "Enter:A:from:B" }, CallLog.Entries);
         }
 
-        /// <summary>
-        /// The same for <c>StateExited</c>, which additionally pins the forwarded event's position:
-        /// between the old state's exit hook and the new state's entry.
-        /// </summary>
         [Test]
         public void Behaviour_StateExited_ForwardsMachineEvent()
         {
@@ -387,19 +320,13 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.AreEqual(new[] { "Exit:B:to:A", "Enter:A:from:B" }, CallLog.Entries);
         }
 
-        // ---- Typed manager -------------------------------------------------
-
-        /// <summary>
-        /// A state closed over the host behaviour sees that exact behaviour instance as its manager,
-        /// and can move the machine through it from its update hook.
-        /// </summary>
         [Test]
         public void Behaviour_TypedState_SeesBehaviourAsManagerAndDrivesTransitions()
         {
             var host = CreateHost<TypedFlowBehaviour>();
 
-            // Nothing is attached until the configuration hooks run, which is what makes the
-            // reference check below a statement about registration rather than about construction.
+            // Nothing is attached until the configuration hooks run, which makes the check below a
+            // statement about registration rather than about construction.
             Assert.IsNull(host.StateA.ObservedManager);
 
             host.InvokeAwake();
@@ -421,10 +348,6 @@ namespace UnityEssentials.States.Tests
                 CallLog.Entries);
         }
 
-        /// <summary>
-        /// A state closed over <see cref="IStateManager{TState}"/> attaches to a behaviour as readily
-        /// as to a plain machine, and sees the behaviour as its manager.
-        /// </summary>
         [Test]
         public void Behaviour_InterfaceTypedState_AttachesWithBehaviourAsManager()
         {
@@ -445,10 +368,6 @@ namespace UnityEssentials.States.Tests
             Assert.AreEqual(TestState.A, host.CurrentStateType);
         }
 
-        /// <summary>
-        /// The behaviour is a complete <see cref="IStateManager{TState}"/>: a caller holding only the
-        /// interface can configure nothing yet still initialize, transition and tick it.
-        /// </summary>
         [Test]
         public void Behaviour_AsInterface_DrivesFullLifecycle()
         {
@@ -479,12 +398,6 @@ namespace UnityEssentials.States.Tests
             Assert.AreSame(host.MachineForTests.CurrentState, manager.CurrentState);
         }
 
-        // ---- Self-configuration --------------------------------------------
-
-        /// <summary>
-        /// Initializing a behaviour runs its own <c>OnInitialize</c> then its own
-        /// <c>InsertTransitions</c>, once each, and a second initialization is refused.
-        /// </summary>
         [Test]
         public void Behaviour_Initialize_InvokesOwnHooksInOrderOnce()
         {
@@ -503,19 +416,16 @@ namespace UnityEssentials.States.Tests
                 },
                 host.HookLog);
 
-            // A host only configures itself once, so the rejected second call must not re-run either
-            // hook and hand the states dictionary a duplicate registration.
+            // The rejected second call must not re-run either hook and hand the states dictionary a
+            // duplicate registration.
             Assert.Throws<StateConfigurationException>(() => host.Initialize());
             Assert.AreEqual(2, host.HookLog.Count);
         }
 
-        /// <summary>
-        /// Without <c>SetInitialState</c>, a behaviour enters the first state its hook registered.
-        /// </summary>
         [Test]
         public void Behaviour_GetInitialState_DefaultsToFirstRegisteredState()
         {
-            // B registers first while A is the enum's default value, so a host that fell back to
+            // B registers first while A is the enum's default, so a host that fell back to
             // default(TState) instead of the first registration would fail here.
             var host = CreateHost<DefaultInitialBehaviour>();
 
@@ -526,10 +436,6 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.AreEqual(new[] { "Enter:B:from:B" }, CallLog.Entries);
         }
 
-        /// <summary>
-        /// <c>SetInitialState</c> called from inside a behaviour's <c>OnInitialize</c> picks the
-        /// state <c>Initialize</c> enters.
-        /// </summary>
         [Test]
         public void Behaviour_SetInitialStateInOnInitialize_EntersDeclaredState()
         {
@@ -544,10 +450,6 @@ namespace UnityEssentials.States.Tests
             CollectionAssert.AreEqual(new[] { "Enter:C:from:C" }, CallLog.Entries);
         }
 
-        /// <summary>
-        /// The pairs a behaviour declares in its own <c>InsertTransitions</c> are the pairs its
-        /// machine enforces — in that direction only.
-        /// </summary>
         [Test]
         public void Behaviour_InsertTransitions_DeclaredPairsAreEnforced()
         {

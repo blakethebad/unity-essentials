@@ -41,9 +41,9 @@ namespace UnityEssentials.Utilities.Tests
         [SetUp]
         public void SetUp()
         {
-            // ResetStatics covers every system this fixture touches: the runner's active list, the
-            // EventBus channels and the cached singleton instance.
-            StaticResetRegistry.ResetStatics();
+            TimerRunner.Reset();
+            EventBus.Clear<DamageEvent>();
+            SingletonCacheReset.Clear<WellBehavedSingleton>();
 
             _referenceSink = null;
             _doubleSink = 0d;
@@ -61,7 +61,8 @@ namespace UnityEssentials.Utilities.Tests
         public void TearDown()
         {
             EventBus.Clear<DamageEvent>();
-            StaticResetRegistry.ResetStatics();
+            TimerRunner.Reset();
+            SingletonCacheReset.Clear<WellBehavedSingleton>();
         }
 
         private static void OnDamage(DamageEvent evt)

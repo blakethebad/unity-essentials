@@ -8,8 +8,8 @@ namespace UnityEssentials.Utilities.Tests
 {
     /// <summary>
     /// EditMode coverage for the MonoBehaviour singleton: auto-creation, discovery, duplicate
-    /// handling, the quitting guard and the reset hook. Awake is driven through the test seam
-    /// because AddComponent does not call it outside play mode.
+    /// handling and the quitting guard. Awake is driven through the test seam because AddComponent
+    /// does not call it outside play mode.
     /// </summary>
     [TestFixture]
     public class SingletonComponentTests
@@ -20,7 +20,7 @@ namespace UnityEssentials.Utilities.Tests
         public void SetUp()
         {
             SingletonComponentRuntime.IsQuitting = false;
-            StaticResetRegistry.ResetStatics();
+            SingletonCacheReset.ClearComponent<TestSingletonComponent>();
         }
 
         [TearDown]
@@ -42,7 +42,7 @@ namespace UnityEssentials.Utilities.Tests
             }
 
             _createdObjects.Clear();
-            StaticResetRegistry.ResetStatics();
+            SingletonCacheReset.ClearComponent<TestSingletonComponent>();
         }
 
         [Test]
@@ -99,19 +99,6 @@ namespace UnityEssentials.Utilities.Tests
 
             Assert.IsNull(instance);
             Assert.IsFalse(TestSingletonComponent.HasInstance);
-        }
-
-        [Test]
-        public void ResetStatics_ClearsTheCachedInstance()
-        {
-            var existing = CreateComponent("Cached");
-            existing.InvokeAwake();
-            Assert.IsTrue(TestSingletonComponent.HasInstance);
-
-            StaticResetRegistry.ResetStatics();
-
-            Assert.IsFalse(TestSingletonComponent.HasInstance);
-            Assert.IsFalse(existing == null);
         }
 
         private TestSingletonComponent CreateComponent(string hostName)

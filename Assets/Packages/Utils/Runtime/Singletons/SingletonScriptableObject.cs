@@ -3,25 +3,15 @@ using UnityEngine;
 
 namespace UnityEssentials.Utilities
 {
-    /// <summary>
-    /// ScriptableObject singleton backed by exactly one asset in a Resources folder of the consuming
-    /// project: the first <c>Instance</c> access loads and caches it. Zero or several matching assets
-    /// throw with guidance rather than picking one arbitrarily.
-    /// </summary>
     public abstract class SingletonScriptableObject<T> : ScriptableObject where T : SingletonScriptableObject<T>
     {
         private static T _instance;
-
-        static SingletonScriptableObject()
-        {
-            StaticResetRegistry.Register(() => _instance = null);
-        }
 
         public static T Instance
         {
             get
             {
-                StaticResetRegistry.AssertMainThread();
+                MainThreadGuard.AssertMainThread();
 
                 if (_instance != null)
                 {

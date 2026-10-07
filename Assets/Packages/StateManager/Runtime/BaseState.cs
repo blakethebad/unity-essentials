@@ -4,30 +4,20 @@ using System.Collections.Generic;
 namespace UnityEssentials.States
 {
     /// <summary>
-    /// The machine-facing base of one state: the enum value it was registered under, the hooks the
-    /// machine calls and the ownership it is attached under. Not derivable directly — author states by
-    /// deriving from <see cref="BaseState{TManager, TState}"/>, which adds the typed manager.
+    /// The machine-facing base of one state. Not derivable directly — author states by deriving from
+    /// <see cref="BaseState{TManager, TState}"/>, which adds the typed manager.
     /// </summary>
     public abstract class BaseState<TState> where TState : struct, Enum
     {
-        // ---- Identity -----------------------------------------------------
-
-        // Only the typed subclass in this assembly can derive, which is what forces authoring
-        // through BaseState<TManager, TState>.
         private protected BaseState()
         {
         }
 
-        /// <summary>
-        /// The enum value this state answers for, assigned by the machine when <c>AddState</c>
-        /// registers it — the state itself does not declare it. Default until then, fixed after.
-        /// </summary>
+        /// <summary>The enum value this state answers for, assigned by the machine when <c>AddState</c> registers it.</summary>
         public TState StateType { get; private set; }
 
         internal IStateManager<TState> Owner { get; private set; }
 
-        // Called by AddState. Re-attaching under the same manager and key is a no-op so a failed
-        // registration can be retried; a different manager or key is a configuration error.
         internal void Attach(IStateManager<TState> manager, TState stateType)
         {
             if (Owner != null)
@@ -49,8 +39,6 @@ namespace UnityEssentials.States
                 return;
             }
 
-            // The key lands before OnAttach so a refused manager type can name the state it turned
-            // down; Owner stays null, which leaves the state unattached and reusable.
             StateType = stateType;
             OnAttach(manager);
             Owner = manager;
@@ -58,64 +46,40 @@ namespace UnityEssentials.States
 
         private protected abstract void OnAttach(IStateManager<TState> manager);
 
-        // ---- Lifecycle hooks ----------------------------------------------
-
-        /// <summary>
-        /// Called by the machine after it has switched to this state. Non-virtual on purpose:
-        /// override <see cref="OnEnterState"/> instead.
-        /// </summary>
+        /// <summary>Called by the machine after it has switched to this state. Override <see cref="OnEnterState"/> instead.</summary>
         public void EnterState(TState previousState)
         {
             OnEnterState(previousState);
         }
 
-        /// <summary>
-        /// Called by the machine before it switches away, while this state is still current.
-        /// Non-virtual on purpose: override <see cref="OnExitState"/> instead.
-        /// </summary>
+        /// <summary>Called by the machine before it switches away. Override <see cref="OnExitState"/> instead.</summary>
         public void ExitState(TState nextState)
         {
             OnExitState(nextState);
         }
 
-        /// <summary>
-        /// Called by the machine once per tick while this state is current. Non-virtual on purpose:
-        /// override <see cref="OnUpdate"/> instead.
-        /// </summary>
+        /// <summary>Called by the machine once per tick while this state is current. Override <see cref="OnUpdate"/> instead.</summary>
         public void UpdateState()
         {
             OnUpdate();
         }
 
-        /// <summary>
-        /// Sets the state up after the machine has switched to it. On the machine's very first entry
-        /// <paramref name="previousState"/> is this state itself; check PreviousStateType for null.
-        /// A transition requested from here is deferred and performed once this entry completes.
-        /// </summary>
+        /// <summary>Sets the state up after the machine has switched to it; a transition requested here is deferred.</summary>
         protected virtual void OnEnterState(TState previousState)
         {
         }
 
-        /// <summary>
-        /// Tears the state down before the machine switches away. Throwing here aborts the transition
-        /// before the swap and leaves the machine on this state.
-        /// </summary>
+        /// <summary>Tears the state down before the machine switches away; throwing here aborts the transition.</summary>
         protected virtual void OnExitState(TState nextState)
         {
         }
 
-        /// <summary>
-        /// Per-frame logic while this state is current. The usual place to request a transition;
-        /// the state entered runs its own update on the next tick, not this one.
-        /// </summary>
+        /// <summary>Per-frame logic while this state is current. The usual place to request a transition.</summary>
         protected virtual void OnUpdate()
         {
         }
 
-        /// <summary>
-        /// Re-runs this state without leaving it: exit then enter, both passed <see cref="StateType"/>.
-        /// Override when a state can reset more cheaply than a full teardown and rebuild.
-        /// </summary>
+        /// <summary>Re-runs this state without leaving it: exit then enter, both passed <see cref="StateType"/>.</summary>
         public virtual void RestartState()
         {
             ExitState(StateType);
@@ -125,18 +89,14 @@ namespace UnityEssentials.States
 
     /// <summary>
     /// The class states are authored from: a state that knows its machine as a
-    /// <typeparamref name="TManager"/>. That can be a concrete manager type, a
-    /// <see cref="StateManagerBehaviour{TState}"/> subclass, or <see cref="IStateManager{TState}"/>
-    /// itself for a state that works with any machine.
+    /// <typeparamref name="TManager"/> — a concrete manager, a <see cref="StateManagerBehaviour{TState}"/>
+    /// subclass, or <see cref="IStateManager{TState}"/> for a state that works with any machine.
     /// </summary>
     public abstract class BaseState<TManager, TState> : BaseState<TState>
         where TManager : class, IStateManager<TState>
         where TState : struct, Enum
     {
-        /// <summary>
-        /// The machine this state was added to, or null until it is registered. Use it to request
-        /// transitions from <see cref="BaseState{TState}.OnUpdate"/>.
-        /// </summary>
+        /// <summary>The machine this state was added to, or null until it is registered.</summary>
         protected TManager Manager { get; private set; }
 
         private protected sealed override void OnAttach(IStateManager<TState> manager)

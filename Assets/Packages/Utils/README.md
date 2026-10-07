@@ -464,12 +464,11 @@ literally named `Resources`. This repo ships none on purpose — a library must 
 
 ### Domain reload resets, it does not clean up
 
-On `RuntimeInitializeOnLoadMethod(SubsystemRegistration)` every registered system clears its
-statics: cached singleton instances, all EventBus channels, the interval log counters, and the
-timer runner's active list (the running `Awaitable` loop is retired through a generation counter).
-Nothing is disposed and no
-`Completed` handler is called — entering play mode with domain reload disabled starts clean, but
-if a singleton owns a file handle or a socket, close it yourself.
+The package assumes domain reload is enabled. The reload rebuilds the domain, so every static starts
+clean on its own: cached singleton instances, all EventBus channels, the interval log counters and
+the timer runner's active list. Nothing is disposed and no `Completed` handler is called — so if a
+singleton owns a file handle or a socket, close it yourself. With domain reload disabled these
+statics survive between play-mode sessions and the package makes no attempt to clear them.
 
 ### Verified manually in play mode
 

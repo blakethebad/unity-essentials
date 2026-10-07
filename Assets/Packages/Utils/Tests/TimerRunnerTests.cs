@@ -4,7 +4,7 @@ namespace UnityEssentials.Utilities.Tests
 {
     /// <summary>
     /// Covers the runner's bookkeeping by pumping TickAll directly: registration, mutation from
-    /// inside a tick pass, deferred compaction, re-entrancy and the domain-reload reset action.
+    /// inside a tick pass, deferred compaction, re-entrancy and the reset.
     /// </summary>
     [TestFixture]
     public class TimerRunnerTests
@@ -218,18 +218,6 @@ namespace UnityEssentials.Utilities.Tests
             Assert.AreEqual(0, TimerRunner.ActiveTimers.Count);
             Assert.AreEqual(generation + 1, TimerRunner.Generation);
             Assert.IsFalse(TimerRunner.IsLoopRunning);
-        }
-
-        [Test]
-        public void StaticResetRegistry_ResetStatics_ClearsActiveTimers()
-        {
-            TimerRunner.Add(new Timer());
-            var generation = TimerRunner.Generation;
-
-            StaticResetRegistry.ResetStatics();
-
-            Assert.AreEqual(0, TimerRunner.ActiveTimers.Count);
-            Assert.AreEqual(generation + 1, TimerRunner.Generation);
         }
     }
 }

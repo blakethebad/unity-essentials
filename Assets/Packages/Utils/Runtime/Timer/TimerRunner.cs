@@ -19,26 +19,15 @@ namespace UnityEssentials.Utilities
         private static bool _isTicking;
         private static bool _hasHoles;
 
-        static TimerRunner()
-        {
-            StaticResetRegistry.Register(Reset);
-        }
-
         internal static void Add(Timer timer)
         {
             if (timer == null || ActiveTimers.Contains(timer))
-            {
                 return;
-            }
 
-            // Appending during a pass is safe: the pass iterates a count snapshot, so the new
-            // timer first ticks on the next frame rather than mid-frame.
             ActiveTimers.Add(timer);
 
             if (IsLoopRunning || !Application.isPlaying)
-            {
                 return;
-            }
 
             IsLoopRunning = true;
             RunLoop(Generation);
@@ -48,14 +37,10 @@ namespace UnityEssentials.Utilities
         {
             var index = ActiveTimers.IndexOf(timer);
             if (index < 0)
-            {
                 return;
-            }
 
             if (_isTicking)
             {
-                // Removing mid-pass would shift every later index onto an already-ticked timer,
-                // so the slot is only blanked here and compacted once the pass is over.
                 ActiveTimers[index] = null;
                 _hasHoles = true;
                 return;
@@ -67,9 +52,7 @@ namespace UnityEssentials.Utilities
         internal static void TickAll(float deltaTime, float unscaledDeltaTime)
         {
             if (_isTicking)
-            {
                 return;
-            }
 
             var count = ActiveTimers.Count;
             _isTicking = true;
@@ -79,15 +62,11 @@ namespace UnityEssentials.Utilities
                 {
                     // A reset triggered from a handler empties the list outright.
                     if (i >= ActiveTimers.Count)
-                    {
                         break;
-                    }
 
                     var timer = ActiveTimers[i];
                     if (timer == null)
-                    {
                         continue;
-                    }
 
                     try
                     {
@@ -116,8 +95,6 @@ namespace UnityEssentials.Utilities
             _hasHoles = false;
             IsLoopRunning = false;
 
-            // Bumping the generation is what retires any loop still alive from the last session:
-            // it checks the counter around every await and returns as soon as it changes.
             Generation++;
         }
 

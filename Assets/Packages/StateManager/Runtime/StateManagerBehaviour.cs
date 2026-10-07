@@ -4,19 +4,9 @@ using UnityEngine;
 
 namespace UnityEssentials.States
 {
-    /// <summary>
-    /// MonoBehaviour host for a self-configuring state machine: it owns a
-    /// <see cref="BaseStateManager{TState}"/>, wires it into Unity's lifecycle (initialize in
-    /// <c>Start</c>, tick in <c>Update</c>) and mirrors its API. States registered here see the
-    /// behaviour itself as their manager, not the machine behind it.
-    /// </summary>
     public abstract partial class StateManagerBehaviour<TState> : MonoBehaviour, IStateManager<TState>
         where TState : struct, Enum
     {
-        // ---- Composition --------------------------------------------------
-
-        // Built in the constructor because a field initializer cannot reference `this`, and the
-        // machine has to exist before any Unity callback for pre-Awake subscription to be safe.
         private readonly BaseStateManager<TState> _machine;
 
         protected StateManagerBehaviour()
@@ -26,40 +16,22 @@ namespace UnityEssentials.States
 
         protected BaseStateManager<TState> Machine => _machine;
 
-        // ---- Editor hooks -------------------------------------------------
-
-        // Unimplemented partial methods outside UNITY_EDITOR: the compiler erases the declarations
-        // and the call sites together, so players pay nothing.
         partial void DebugAttachOwner();
-
         partial void DebugUnregister();
 
-        // ---- Unity lifecycle ----------------------------------------------
-
-        /// <summary>
-        /// Names the machine's owner for the editor debug window. Override to run your own setup,
-        /// calling <c>base.Awake()</c>.
-        /// </summary>
+        /// <summary>Names the machine's owner for the editor debug window. Override calling <c>base.Awake()</c>.</summary>
         protected virtual void Awake()
         {
-            // Editor-only and erased in players. Must precede initialization, which happens in
-            // Start, because the machine reads its owner once as it registers.
             DebugAttachOwner();
         }
 
-        /// <summary>
-        /// Initializes the machine, which configures it and enters the initial state. Override
-        /// without calling base to defer that and call <c>Initialize()</c> yourself later.
-        /// </summary>
+        /// <summary>Initializes the machine. Override without calling base to initialize it yourself later.</summary>
         protected virtual void Start()
         {
             _machine.Initialize();
         }
 
-        /// <summary>
-        /// Ticks the current state once per frame, and does nothing until the machine is initialized.
-        /// Override to add per-frame work, calling <c>base.Update()</c> so states keep updating.
-        /// </summary>
+        /// <summary>Ticks the current state once per frame, and does nothing until the machine is initialized.</summary>
         protected virtual void Update()
         {
             if (_machine.IsInitialized)
@@ -68,51 +40,32 @@ namespace UnityEssentials.States
             }
         }
 
-        /// <summary>
-        /// Releases the machine from the editor debug window's registry; empty in player builds.
-        /// Override to add your own cleanup, calling <c>base.OnDestroy()</c>.
-        /// </summary>
+        /// <summary>Releases the machine from the editor debug window's registry; empty in player builds.</summary>
         protected virtual void OnDestroy()
         {
             DebugUnregister();
         }
 
-        // ---- Configuration ------------------------------------------------
-
-        /// <summary>
-        /// Registers this machine's states with <see cref="AddState"/> — each with the states it may
-        /// move to — and optionally picks the starting one with <see cref="SetInitialState"/>.
-        /// Called once by <see cref="Initialize"/>.
-        /// </summary>
+        /// <summary>Registers this machine's states and their moves. Called once by <see cref="Initialize"/>.</summary>
         protected abstract void OnInitialize();
 
-        /// <summary>
-        /// Declares moves that <see cref="AddState"/> did not cover — the escape hatches
-        /// <c>AllowAny</c> and late additions. Optional; called once by <see cref="Initialize"/>.
-        /// </summary>
+        /// <summary>Declares moves <see cref="AddState"/> did not cover. Optional; called once by <see cref="Initialize"/>.</summary>
         protected virtual void InsertTransitions(in Transitions<TState> transitions)
         {
         }
 
-        /// <summary>
-        /// Decides which state <see cref="Initialize"/> enters. The default honours
-        /// <see cref="SetInitialState"/> and otherwise falls back to the first state registered.
-        /// </summary>
+        /// <summary>Decides which state <see cref="Initialize"/> enters; the default honours <see cref="SetInitialState"/>.</summary>
         protected virtual TState GetInitialState()
         {
             return _machine.DefaultInitialState();
         }
 
-        // ---- Machine surface ----------------------------------------------
-
-        /// <summary>Forwards <see cref="IStateManager{TState}.StateExited"/>.</summary>
         public event Action<TState, TState> StateExited
         {
             add => _machine.StateExited += value;
             remove => _machine.StateExited -= value;
         }
 
-        /// <summary>Forwards <see cref="IStateManager{TState}.StateEntered"/>.</summary>
         public event Action<TState, TState> StateEntered
         {
             add => _machine.StateEntered += value;
@@ -176,11 +129,6 @@ namespace UnityEssentials.States
             return this;
         }
 
-        // ---- Hosted machine -----------------------------------------------
-
-        // The engine the behaviour delegates to. It owns no configuration of its own: every hook
-        // forwards to the behaviour, and SetAttachOwner makes states attach to the behaviour so
-        // BaseState<TManager, TState> can be closed over the behaviour type.
         private sealed class HostedMachine : BaseStateManager<TState>
         {
             private readonly StateManagerBehaviour<TState> _owner;
@@ -194,11 +142,6 @@ namespace UnityEssentials.States
             protected override void OnInitialize()
             {
                 _owner.OnInitialize();
-            }
-
-            protected override void InsertTransitions(in Transitions<TState> transitions)
-            {
-                _owner.InsertTransitions(transitions);
             }
 
             protected override TState GetInitialState()

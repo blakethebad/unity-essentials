@@ -4,11 +4,6 @@ using UnityEngine.UI;
 
 namespace UnityEssentials.UI
 {
-    /// <summary>
-    /// The canvas configuration a window is built with, authored inside <see cref="WindowData"/> and
-    /// written onto the freshly created components by <see cref="Apply"/>. Windows always render as
-    /// a screen-space overlay canvas. Properties are get-only: values are applied once, at load.
-    /// </summary>
     [Serializable]
     public sealed class CanvasSettings
     {
@@ -72,10 +67,6 @@ namespace UnityEssentials.UI
         [Tooltip("Layers considered when Blocking Objects is set. Ignored when it is None.")]
         [SerializeField] private LayerMask blockingMask;
 
-        /// <summary>
-        /// Creates settings at the defaults: scale with screen size against a 1920x1080 reference
-        /// resolution with a 0.5 width/height match, and Unity's own defaults for everything else.
-        /// </summary>
         public CanvasSettings()
         {
             sortingLayerName = DefaultSortingLayerName;
@@ -132,12 +123,8 @@ namespace UnityEssentials.UI
 
         internal void Normalize()
         {
-            // Called from WindowData.OnValidate on every inspector keystroke — must never throw.
-            // Non-finite values are restored to defaults because Clamp01/Max pass NaN through.
             if (string.IsNullOrEmpty(sortingLayerName))
-            {
                 sortingLayerName = DefaultSortingLayerName;
-            }
 
             matchWidthOrHeight = IsNonFinite(matchWidthOrHeight)
                 ? DefaultMatchWidthOrHeight
@@ -156,22 +143,14 @@ namespace UnityEssentials.UI
         internal void Apply(Canvas c, CanvasScaler s, GraphicRaycaster r)
         {
             if (c == null)
-            {
                 throw new ArgumentNullException(nameof(c));
-            }
 
             if (s == null)
-            {
                 throw new ArgumentNullException(nameof(s));
-            }
 
             if (r == null)
-            {
                 throw new ArgumentNullException(nameof(r));
-            }
 
-            // Every field is written unconditionally so freshly created components never keep
-            // Unity's defaults where the asset authored something else.
             c.renderMode = RenderMode.ScreenSpaceOverlay;
             c.worldCamera = null;
             c.pixelPerfect = pixelPerfect;

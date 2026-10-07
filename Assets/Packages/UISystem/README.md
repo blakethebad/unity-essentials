@@ -185,14 +185,12 @@ property names with a lower-case initial.
 ## Events
 
 ```csharp
-_ui.WindowSwitched += (from, to) => _cachedMenu = null;   // drop GetUI caches here
 _ui.UIShown  += element => Analytics.ScreenView(element.GetType().Name);
 _ui.UIHidden += element => { };
 ```
 
 | Event | Fires |
 |---|---|
-| `WindowSwitched(from, to)` | after a switch completes; `from` null on first load, `to` null on close. Exactly once per switch. |
 | `UIShown(element)` | on entering `Shown` — when the show *transition completes*. |
 | `UIHidden(element)` | on entering `Hiding` — on *intent*, while the element is still visible. |
 
@@ -273,7 +271,7 @@ usings coexist cleanly.
 ### Cached elements die with their window
 
 `GetUI<T>()` references are valid for the life of the window — a switch destroys them and builds new
-instances. Drop caches in a `WindowSwitched` handler.
+instances, so re-resolve through the service after a switch rather than holding a cache across one.
 
 ### Testing destroyed objects
 
@@ -365,9 +363,8 @@ public sealed class UIService : IDisposable
     public WindowData ActiveWindowData { get; }
     public bool       IsWindowLoaded   { get; }
 
-    public event Action<WindowData, WindowData> WindowSwitched;
-    public event Action<UIBase>                 UIShown;
-    public event Action<UIBase>                 UIHidden;
+    public event Action<UIBase> UIShown;
+    public event Action<UIBase> UIHidden;
 
     public UIWindow SwitchWindow(WindowData windowData);
     public void     CloseWindow();

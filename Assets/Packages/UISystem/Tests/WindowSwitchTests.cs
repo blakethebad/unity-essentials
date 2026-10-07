@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -201,68 +200,6 @@ namespace UnityEssentials.UI.Tests
             Assert.IsTrue(service.GetUI<TestElementB>().IsVisible);
         }
 
-        [Test]
-        public void SwitchWindow_WithAMalformedDefinition_RaisesNoWindowSwitched()
-        {
-            var service = CreateLoadedService(BuildUIPrefab<TestElementA>());
-            var switches = 0;
-            service.WindowSwitched += (from, to) => switches++;
-
-            Assert.Throws<WindowConfigurationException>(
-                () => service.SwitchWindow(BuildWindowData(new GameObject[] { null })));
-
-            Assert.AreEqual(0, switches);
-        }
-
-        // ---- WindowSwitched ---------------------------------------------------------
-
-        [Test]
-        public void WindowSwitched_ReportsTheOutgoingAsset()
-        {
-            var service = CreateService();
-            var froms = new List<WindowData>();
-            service.WindowSwitched += (from, to) => froms.Add(from);
-            var dataA = BuildWindowData(BuildUIPrefab<TestElementA>());
-            var dataB = BuildWindowData(BuildUIPrefab<TestElementB>());
-
-            service.SwitchWindow(dataA);
-            service.SwitchWindow(dataB);
-
-            Assert.AreEqual(2, froms.Count);
-            Assert.IsNull(froms[0]);
-            Assert.AreSame(dataA, froms[1]);
-        }
-
-        [Test]
-        public void WindowSwitched_ReportsTheIncomingAssetOncePerSwitch()
-        {
-            var service = CreateService();
-            var tos = new List<WindowData>();
-            service.WindowSwitched += (from, to) => tos.Add(to);
-            var dataA = BuildWindowData(BuildUIPrefab<TestElementA>());
-            var dataB = BuildWindowData(BuildUIPrefab<TestElementB>());
-
-            service.SwitchWindow(dataA);
-            service.SwitchWindow(dataB);
-
-            Assert.AreEqual(2, tos.Count);
-            Assert.AreSame(dataA, tos[0]);
-            Assert.AreSame(dataB, tos[1]);
-        }
-
-        [Test]
-        public void WindowSwitched_IsRaisedAfterTheNewWindowIsBuilt()
-        {
-            var service = CreateService();
-            UIWindow observed = null;
-            service.WindowSwitched += (from, to) => observed = service.ActiveWindow;
-
-            service.SwitchWindow(BuildWindowData(BuildUIPrefab<TestElementA>()));
-
-            Assert.IsNotNull(observed);
-            Assert.IsNotNull(observed.GetUI<TestElementA>());
-        }
-
         // ---- CloseWindow ---------------------------------------------------------------
 
         [Test]
@@ -302,32 +239,15 @@ namespace UnityEssentials.UI.Tests
         }
 
         [Test]
-        public void CloseWindow_RaisesWindowSwitchedWithANullDestination()
-        {
-            var service = CreateService();
-            var data = BuildWindowData(BuildUIPrefab<TestElementA>());
-            service.SwitchWindow(data);
-            var froms = new List<WindowData>();
-            var tos = new List<WindowData>();
-            service.WindowSwitched += (from, to) => { froms.Add(from); tos.Add(to); };
-
-            service.CloseWindow();
-
-            Assert.AreEqual(1, tos.Count);
-            Assert.AreSame(data, froms[0]);
-            Assert.IsNull(tos[0]);
-        }
-
-        [Test]
         public void CloseWindow_WithNothingLoaded_DoesNothing()
         {
             var service = CreateService();
-            var switches = 0;
-            service.WindowSwitched += (from, to) => switches++;
 
             Assert.DoesNotThrow(() => service.CloseWindow());
 
-            Assert.AreEqual(0, switches);
+            Assert.IsNull(service.ActiveWindow);
+            Assert.IsNull(service.ActiveWindowData);
+            Assert.IsFalse(service.IsWindowLoaded);
         }
 
         [Test]
