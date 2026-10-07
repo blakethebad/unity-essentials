@@ -1,5 +1,11 @@
 {
   "dependencies": {
+    "com.nvimunity.editor": {
+      "version": "file:com.nvimunity.editor",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.unity.ai.navigation": {
       "version": "2.0.14",
       "depth": 0,
@@ -191,6 +197,57 @@
         "com.unity.modules.jsonserialize": "1.0.0"
       },
       "url": "https://packages.unity.com"
+    },
+    "com.unityessentials.colliders": {
+      "version": "file:com.unityessentials.colliders",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.modules.physics": "1.0.0"
+      }
+    },
+    "com.unityessentials.extensions": {
+      "version": "file:com.unityessentials.extensions",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
+    "com.unityessentials.haptics": {
+      "version": "file:com.unityessentials.haptics",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.modules.androidjni": "1.0.0"
+      }
+    },
+    "com.unityessentials.services": {
+      "version": "file:com.unityessentials.services",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
+    "com.unityessentials.states": {
+      "version": "file:com.unityessentials.states",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.modules.uielements": "1.0.0"
+      }
+    },
+    "com.unityessentials.ui": {
+      "version": "file:com.unityessentials.ui",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {
+        "com.unity.ugui": "2.0.0",
+        "com.unity.modules.uielements": "1.0.0"
+      }
+    },
+    "com.unityessentials.utilities": {
+      "version": "file:com.unityessentials.utilities",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
     },
     "com.unity.modules.accessibility": {
       "version": "1.0.0",
