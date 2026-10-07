@@ -1,0 +1,11 @@
+{
+  "name": "com.unityessentials.colliders",
+  "version": "1.0.0",
+  "displayName": "Essentials InverseCollider",
+  "description": "Keeps dynamic rigidbodies inside a volume instead of out of it: walls are solid from the inside only, so anything outside falls in for free. One component owns a single inverted-winding, non-convex MeshCollider that is never rendered.",
+  "unity": "6000.0",
+  "author": { "name": "Bekir Anil Mavili" },
+  "dependencies": {
+    "com.unity.modules.physics": "1.0.0"
+  }
+}

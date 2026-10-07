@@ -1,0 +1,8 @@
+{
+  "name": "com.unityessentials.extensions",
+  "version": "1.0.0",
+  "displayName": "Essentials Extensions",
+  "description": "Extension methods for the types Unity gives you but does not extend. A home for small, dependency-free helpers; starts with time formatting.",
+  "unity": "6000.0",
+  "author": { "name": "Bekir Anil Mavili" }
+}

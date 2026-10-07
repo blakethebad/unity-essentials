@@ -1,0 +1,12 @@
+{
+  "name": "com.unityessentials.ui",
+  "version": "1.0.0",
+  "displayName": "Essentials UISystem",
+  "description": "A small uGUI window system: one entry point for showing and hiding UI, one element base class to derive from, and a ScriptableObject declaring what a window owns and how its canvas is built.",
+  "unity": "6000.0",
+  "author": { "name": "Bekir Anil Mavili" },
+  "dependencies": {
+    "com.unity.ugui": "2.0.0",
+    "com.unity.modules.uielements": "1.0.0"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "name": "com.unityessentials.haptics",
+  "version": "1.0.0",
+  "displayName": "Essentials Haptics",
+  "description": "Cross-platform haptic feedback: three built-in impact presets, authored custom patterns, one static entry point, no setup. iOS and Android are implemented; every other platform resolves to a silent no-op, so haptic calls are safe to leave in code that runs everywhere.",
+  "unity": "6000.0",
+  "author": { "name": "Bekir Anil Mavili" },
+  "dependencies": {
+    "com.unity.modules.androidjni": "1.0.0"
+  },
+  "samples": [
+    {
+      "displayName": "Haptics Tester",
+      "description": "An IMGUI panel that fires every preset and authored pattern at runtime.",
+      "path": "Samples~/HapticsTester"
+    }
+  ]
+}

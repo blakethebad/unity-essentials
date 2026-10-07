@@ -1,0 +1,11 @@
+{
+  "name": "com.unityessentials.states",
+  "version": "1.0.0",
+  "displayName": "Essentials StateManager",
+  "description": "A finite state machine keyed by your own enum, with a deny-all-by-default transition table: undeclared transitions throw instead of quietly succeeding. Plain-C# core that runs without a scene, plus an optional MonoBehaviour host and an editor debugging window.",
+  "unity": "6000.0",
+  "author": { "name": "Bekir Anil Mavili" },
+  "dependencies": {
+    "com.unity.modules.uielements": "1.0.0"
+  }
+}

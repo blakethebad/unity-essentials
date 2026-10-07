@@ -1,0 +1,8 @@
+{
+  "name": "com.unityessentials.services",
+  "version": "1.0.0",
+  "displayName": "Essentials ServiceLocator",
+  "description": "A static, allocation-free service locator. Fluent registration, lazy shared instances, transients, scopes with shadowing, and deterministic disposal.",
+  "unity": "6000.0",
+  "author": { "name": "Bekir Anil Mavili" }
+}
