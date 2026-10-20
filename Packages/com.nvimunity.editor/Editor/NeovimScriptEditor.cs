@@ -89,15 +89,13 @@ namespace NvimUnity.Editor
             _projectGeneration = projectGeneration;
         }
 
-        //Rebuild the generator after a Preferences switch, keeping the current flags. The sync
-        //server has to be handed the new instance (Start will not swap it), then files are
+        //Rebuild the generator after a Preferences switch (flags persist in NvimUnityConfig). The
+        //sync server has to be handed the new instance (Start will not swap it), then files are
         //regenerated so they match the new selection right away.
         private void SwapGenerator()
         {
             var root = _projectGeneration.ProjectDirectory;
-            var flags = _projectGeneration.ProjectGenerationFlag;
             _projectGeneration = CreateGenerator(root);
-            _projectGeneration.ProjectGenerationFlag = flags;
             NeovimSyncServer.SetGenerator(_projectGeneration);
             _projectGeneration.SyncProject();
         }
@@ -252,6 +250,7 @@ namespace NvimUnity.Editor
             _projectGeneration.ProjectGenerationFlag = next
                 ? _projectGeneration.ProjectGenerationFlag | flag
                 : _projectGeneration.ProjectGenerationFlag & ~flag;
+            _projectGeneration.SyncProject();
         }
 
         public bool OpenProject(string filePath = "", int line = -1, int column = -1)

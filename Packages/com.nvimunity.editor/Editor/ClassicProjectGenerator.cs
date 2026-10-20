@@ -151,7 +151,13 @@ namespace NvimUnity.Editor
         public string ProjectDirectoryWithSlash;
         public string ProjectName { get; }
 
-        public ProjectGenerationFlag ProjectGenerationFlag { get; set; } = ProjectGenerationFlag.None;
+        //Persisted: an in-memory flag reset to None on every domain reload, dropping embedded
+        //packages from the sln (Roslyn then treats their files as miscellaneous).
+        public ProjectGenerationFlag ProjectGenerationFlag
+        {
+            get => NvimUnityConfig.instance.GenerationFlags;
+            set => NvimUnityConfig.instance.GenerationFlags = value;
+        }
         private Assembly[] _allEditorAssemblies;
         private Assembly[] _allPlayerAssemblies;
         private Assembly[] _allAssemblies;
@@ -251,6 +257,13 @@ namespace NvimUnity.Editor
                     projectParts.Add(new ProjectPart(assembly.name, assembly, additinalAssetsForProject));
                     assemblyNamesWithSource.Add(assembly.name);
                 }
+            }
+
+            foreach (var sample in HiddenSampleAssemblies.Collect(path => !IsInternalizedPackagePath(path), assemblyNamesWithSource))
+            {
+                assemblyUsage.AddProjectAssembly(sample);
+                projectParts.Add(new ProjectPart(sample.name, sample, new List<string>()));
+                assemblyNamesWithSource.Add(sample.name);
             }
 
             //TODO: Not sure about the bottom part did not understand most of it

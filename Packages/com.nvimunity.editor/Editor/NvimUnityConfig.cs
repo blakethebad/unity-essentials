@@ -26,7 +26,8 @@ namespace NvimUnity.Editor
         [SerializeField] private string m_TargetFramework = "";
         // SDK-style only. Empty, "latest" or "auto" uses Unity's own compiler version.
         [SerializeField] private string m_LangVersion = "";
-        [SerializeField] private bool m_IncludePackages = true;
+        // Unity's VS/Rider default. Without Embedded, Packages/ code lands in no csproj.
+        [SerializeField] private ProjectGenerationFlag m_GenerationFlags = ProjectGenerationFlag.Embedded | ProjectGenerationFlag.Local;
         [SerializeField] private bool m_IncludeTests = true;
 
         [Header("Auto Sync")]
@@ -72,10 +73,10 @@ namespace NvimUnity.Editor
             set { m_LangVersion = value; Save(); }
         }
 
-        public bool IncludePackages
+        public ProjectGenerationFlag GenerationFlags
         {
-            get => m_IncludePackages;
-            set { m_IncludePackages = value; Save(); }
+            get => m_GenerationFlags;
+            set { m_GenerationFlags = value; Save(); }
         }
 
         public bool IncludeTests
