@@ -78,6 +78,7 @@ namespace UnityEssentials.Utilities
         internal string Prefix => _prefix;
 
         /// <summary>Logs an informational message under this logger's header.</summary>
+        [HideInCallstack]
         [Conditional("UNITY_EDITOR")]
         [Conditional("DEVELOPMENT_BUILD")]
         public void Info(object message)
@@ -86,6 +87,7 @@ namespace UnityEssentials.Utilities
         }
 
         /// <summary>Logs a warning under this logger's header.</summary>
+        [HideInCallstack]
         [Conditional("UNITY_EDITOR")]
         [Conditional("DEVELOPMENT_BUILD")]
         public void Warning(object message)
@@ -94,6 +96,7 @@ namespace UnityEssentials.Utilities
         }
 
         /// <summary>Logs an error under this logger's header.</summary>
+        [HideInCallstack]
         [Conditional("UNITY_EDITOR")]
         [Conditional("DEVELOPMENT_BUILD")]
         public void Error(object message)
@@ -102,6 +105,7 @@ namespace UnityEssentials.Utilities
         }
 
         /// <summary>Logs an error whose body is highlighted in red, for failures worth spotting at a glance.</summary>
+        [HideInCallstack]
         [Conditional("UNITY_EDITOR")]
         [Conditional("DEVELOPMENT_BUILD")]
         public void Critical(object message)
@@ -110,6 +114,7 @@ namespace UnityEssentials.Utilities
         }
 
         /// <summary>Logs a message at the given severity, for callers that pick the severity at runtime.</summary>
+        [HideInCallstack]
         [Conditional("UNITY_EDITOR")]
         [Conditional("DEVELOPMENT_BUILD")]
         public void Message(LogSeverity severity, object message)
@@ -121,6 +126,7 @@ namespace UnityEssentials.Utilities
         /// Logs an informational message on the first call at this call site, then on every
         /// <paramref name="interval"/>-th call from it.
         /// </summary>
+        [HideInCallstack]
         [Conditional("UNITY_EDITOR")]
         [Conditional("DEVELOPMENT_BUILD")]
         public void Interval(
@@ -134,6 +140,7 @@ namespace UnityEssentials.Utilities
         /// Logs at the given severity on the first call at this call site, then on every
         /// <paramref name="interval"/>-th call from it.
         /// </summary>
+        [HideInCallstack]
         [Conditional("UNITY_EDITOR")]
         [Conditional("DEVELOPMENT_BUILD")]
         public void Interval(
@@ -193,6 +200,7 @@ namespace UnityEssentials.Utilities
             return prefix + body;
         }
 
+        [HideInCallstack]
         private void Dispatch(LogSeverity severity, object message)
         {
             var text = FormatMessage(_prefix, severity, message);
@@ -214,6 +222,7 @@ namespace UnityEssentials.Utilities
             }
         }
 
+        [HideInCallstack]
         private void DispatchInterval(
             LogSeverity severity, object message, int interval, string filePath, int lineNumber)
         {
