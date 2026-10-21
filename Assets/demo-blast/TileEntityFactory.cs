@@ -26,13 +26,13 @@ public class TileEntityFactory : ITileEntityFactory
 
     public ITileEntityView CreateView(in TileEntityData entityData)
     {
-        var a = entityData.entityType switch
+        GameObject a = entityData.entityType switch
         {
-            EntityType.Stone => Object.Instantiate<StoneViewMono>(_stoneViewPrefab, _entityParent),
+            EntityType.Stone => Object.Instantiate<StoneViewMono>(_stoneViewPrefab, _entityParent).gameObject,
             _ => null,
         };
 
-		var view = a as ITileEntityView;
+		var view = a.GetComponent<ITileEntityView>();
 		_spawnedViews.Add(view, a.gameObject);
 		return view;
     }
@@ -42,6 +42,7 @@ public class TileEntityFactory : ITileEntityFactory
 		if(!_spawnedViews.TryGetValue(tileEntityView, out var gameObject))
 			return;
 
+		_spawnedViews.Remove(tileEntityView);
 		Object.Destroy(gameObject);
     }
 }

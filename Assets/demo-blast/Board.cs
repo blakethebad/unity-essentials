@@ -43,6 +43,9 @@ public class Board : ITileListener
 		var checkedTiles = new List<Tile>();
 		CheckColorMatchAroundTile(x, y, stone.Color, matchedTiles, checkedTiles);
 
+		if(matchedTiles.Count < 2)
+			return;
+
 		MatchTiles(matchedTiles);
 	}
 
@@ -104,6 +107,7 @@ public class Board : ITileListener
 			_tileEntityFactory.ReleaseView(entityView);
 			tile.Entity = null;
 			_entities.Remove(entity);
+			_entityViewMap.Remove(entity);
 		}
 	}
 }

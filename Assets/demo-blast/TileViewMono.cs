@@ -12,7 +12,6 @@ public class TileViewMono : MonoBehaviour , ITileView , IPointerDownHandler, IPo
 
     public void OnPointerDown(PointerEventData eventData)
     {
-		Log.Error($"Pressed {new Vector2(_tile.X, _tile.Y)} with {_tile.Entity}");
 		_isPressStartedHere = true;
     }
 
@@ -26,7 +25,6 @@ public class TileViewMono : MonoBehaviour , ITileView , IPointerDownHandler, IPo
 		if(!_isPressStartedHere)
 			return;
 
-		Log.Error($"Trying {new Vector2(_tile.X, _tile.Y)} with {_tile.Entity}");
 		_listener.OnTileInputRequested(_tile.X, _tile.Y);
     }
 
