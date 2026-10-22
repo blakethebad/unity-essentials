@@ -204,6 +204,12 @@
       },
       "url": "https://packages.unity.com"
     },
+    "com.unityessentials.collections": {
+      "version": "file:com.unityessentials.collections",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "com.unityessentials.colliders": {
       "version": "file:com.unityessentials.colliders",
       "depth": 0,

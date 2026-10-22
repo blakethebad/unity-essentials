@@ -1,0 +1,8 @@
+{
+  "name": "com.unityessentials.collections",
+  "version": "1.0.0",
+  "displayName": "Essentials Collections",
+  "description": "A dictionary Unity can serialize: SerializedDictionary<TKey, TValue> is a drop-in IDictionary that survives scenes, prefabs and assets, edited through a clean Odin-style inspector with key/value columns, paging and duplicate-key highlighting.",
+  "unity": "6000.0",
+  "author": { "name": "Bekir Anil Mavili" }
+}

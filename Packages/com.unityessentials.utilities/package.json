@@ -1,6 +1,6 @@
 {
   "name": "com.unityessentials.utilities",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "displayName": "Essentials Utils",
   "description": "Five small, self-contained utilities: a Timer, a logging facade, singleton base classes, a typed EventBus, and an AllocationCounter.",
   "unity": "6000.0",
