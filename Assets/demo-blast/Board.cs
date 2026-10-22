@@ -5,31 +5,57 @@ using UnityEssentials.Utilities;
 public class Board : ITileListener
 {
 	private Tile[,] _tiles;
-	private ITileView[,] _tileViews; //TODO: Probably going to move this into something like BoardViewMono
-	
-	private Dictionary<ITileEntity, ITileEntityView> _entityViewMap;
+	private Tile[] _tilesOrdered;
+
 	private List<ITileEntity> _entities;
-
-	private ITileViewFactory _tileViewFactory; //TODO: Moving to a board view might aswell save us from creating factories for other elements
 	private ITileEntityFactory _tileEntityFactory;
-
+	private IBoardListener _listener;
 	private StoneColor[] _tempColors = new StoneColor[] { StoneColor.Red, StoneColor.Blue, StoneColor.Green, StoneColor.Yellow, StoneColor.Purple };
 
-	public Board(ITileViewFactory tileViewFactory, ITileEntityFactory tileEntityFactory)
+	public Board(ITileEntityFactory tileEntityFactory, IBoardListener listener)
 	{
-		_tileViewFactory = tileViewFactory;
 		_tileEntityFactory = tileEntityFactory;
+		_listener = listener;
 	}
 
 	public void GenerateBoard(int sizeX, int sizeY)
 	{
 		_tiles = new Tile[sizeX, sizeY];
+		_tilesOrdered = new Tile[sizeX * sizeY];
 		_entities = new List<ITileEntity>();
-		_entityViewMap = new Dictionary<ITileEntity, ITileEntityView>();
 
-		for(var x = 0; x < sizeX; x++)
-			for(var y = 0; y < sizeY; y++)
-				SetupTile(x,y);
+		var orderedIndex = 0;
+		for(var y = 0; y < sizeY; y++)
+			for(var x = 0; x < sizeX; x++)
+			{
+				var tile = SetupTile(x,y);
+				_tilesOrdered[orderedIndex] = tile;
+				orderedIndex++;
+			}
+
+		_listener.OnBoardGenerated(in _tilesOrdered);
+	}
+
+	private Tile SetupTile(int x, int y)
+	{
+		var tile = new Tile();
+		tile.Initialize(x, y);
+		_tiles[x, y] = tile;
+
+		var randomColorIndex = Random.Range(0, _tempColors.Length - 1);
+		var randomColor = _tempColors[randomColorIndex];
+		var entityData = new TileEntityData()
+		{
+			entityType = EntityType.Stone,
+			stoneColor = randomColor
+		};
+
+		var tileEntity = _tileEntityFactory.Create(in entityData);
+		tile.BindEntity(tileEntity);
+		_entities.Add(tileEntity);
+		_listener.OnEntityCreated(x, y, tileEntity, entityData);
+
+		return tile;
 	}
 
 	public void OnTileInputRequested(int x, int y)
@@ -47,37 +73,7 @@ public class Board : ITileListener
 			return;
 
 		MatchTiles(matchedTiles);
-	}
-
-	private void SetupTile(int x, int y)
-	{
-		var tile = new Tile();
-		tile.Initialize(x, y);
-		_tiles[x, y] = tile;
-
-		//TODO: This part can also move to the BoardView part
-		var tileView = _tileViewFactory.GetTileView();
-		tileView.Bind(tile);
-		tileView.SetTilePosition(x,y);
-		tileView.SetListener(this);
-
-		var randomColorIndex = Random.Range(0, _tempColors.Length - 1);
-		var randomColor = _tempColors[randomColorIndex];
-		var entityData = new TileEntityData()
-		{
-			entityType = EntityType.Stone,
-			stoneColor = randomColor
-		};
-		var tileEntity = _tileEntityFactory.Create(in entityData);
-		tile.BindEntity(tileEntity);
-
-		//TODO: Probably move this into view side
-		var tileEntityView = _tileEntityFactory.CreateView(in entityData);
-		tileEntityView.Bind(tileEntity);
-		tileEntityView.SetEntityPosition(x,y);
-
-		_entities.Add(tileEntity);
-		_entityViewMap.Add(tileEntity, tileEntityView);
+		DropEntities();
 	}
 
 	private void CheckColorMatchAroundTile(int x, int y, StoneColor checkedColor, List<Tile> matchedTiles, List<Tile> chekcedTiles)
@@ -100,14 +96,79 @@ public class Board : ITileListener
 
 	private void MatchTiles(List<Tile> matchedTiles)
 	{
+		var matchedEntities = new List<ITileEntity>();
 		foreach(var tile in matchedTiles)
 		{
 			var entity = tile.Entity;
-			var entityView = _entityViewMap.GetValueOrDefault(entity);
-			_tileEntityFactory.ReleaseView(entityView);
 			tile.Entity = null;
 			_entities.Remove(entity);
-			_entityViewMap.Remove(entity);
+			matchedEntities.Add(entity);
 		}
+
+		_listener.OnEntitiesMatched(matchedEntities);
+	}
+
+	private void DropEntities()
+	{
+		var emptyTiles = new List<Tile>();
+
+		for(var i = 0; i < _tilesOrdered.Length; i++)
+		{
+			var tile = _tilesOrdered[i];
+			if (tile.Entity == null)
+				emptyTiles.Add(tile);
+		}
+
+		if(emptyTiles.Count <= 0)
+			return;
+
+		var processedTiles = new List<Tile>();
+		foreach(var emptyTile in emptyTiles)
+		{
+			GetTileFromAbove(emptyTile, processedTiles);
+		}
+
+		DropEntities();
+	}
+
+	private void GetTileFromAbove(Tile emptyTile, List<Tile> processedTiles)
+	{
+		if(processedTiles.Contains(emptyTile))
+			return;
+
+		var x = emptyTile.X;
+		var y = emptyTile.Y + 1;
+		if (y >= _tiles.GetLength(1) || y < 0)
+		{
+			y = emptyTile.Y;
+			var randomColorIndex = Random.Range(0, _tempColors.Length - 1);
+			var randomColor = _tempColors[randomColorIndex];
+			var entityData = new TileEntityData()
+			{
+				entityType = EntityType.Stone,
+				stoneColor = randomColor
+			};
+			var tileEntity = _tileEntityFactory.Create(in entityData);
+			emptyTile.BindEntity(tileEntity);
+			_listener.OnEntityCreated(x, y, tileEntity, entityData);
+
+			_entities.Add(tileEntity);
+		}
+		else
+		{
+			var topTile = _tiles[x, y];
+			if (topTile.Entity != null)
+			{
+				var entity = topTile.Entity;
+				topTile.Entity = null;
+				emptyTile.Entity = entity;
+
+				_listener.OnEntityMoved(entity, emptyTile);
+			}
+			
+			GetTileFromAbove(topTile, processedTiles);
+		}
+
+		processedTiles.Add(emptyTile);
 	}
 }

@@ -492,6 +492,50 @@ MonoBehaviour:
   m_ShadowLayerMask: 1
   m_RenderingLayers: 1
   m_ShadowRenderingLayers: 1
+--- !u!1 &1080164045
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1080164047}
+  - component: {fileID: 1080164046}
+  m_Layer: 0
+  m_Name: BoardView
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1080164046
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1080164045}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 624d0925c439a41df45e3daedf9b24de, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BoardViewMono
+--- !u!4 &1080164047
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1080164045}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: -0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1970163298
 GameObject:
   m_ObjectHideFlags: 0
@@ -524,7 +568,9 @@ MonoBehaviour:
   boardSizeX: 9
   boardSizeY: 9
   gridCamera: {fileID: 305191953}
+  boardView: {fileID: 1080164046}
   tileViewPrefab: {fileID: 6496817477389119527, guid: c741eea488ba4e8448d21502d9fa3d16, type: 3}
+  stoneViewPrefab: {fileID: 7515637442269855255, guid: 7856c4b639182834c8e4d36d8da437e3, type: 3}
 --- !u!4 &1970163300
 Transform:
   m_ObjectHideFlags: 0
@@ -548,3 +594,4 @@ SceneRoots:
   - {fileID: 470252849}
   - {fileID: 1970163300}
   - {fileID: 116741578}
+  - {fileID: 1080164047}

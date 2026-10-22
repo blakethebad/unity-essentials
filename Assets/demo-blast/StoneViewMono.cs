@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEssentials.Utilities;
 
 public class StoneViewMono : MonoBehaviour, ITileEntityView
 {
@@ -22,6 +23,13 @@ public class StoneViewMono : MonoBehaviour, ITileEntityView
 		_stoneEntity = (Stone) tileEntity;
 		var color = StoneColors.GetValueOrDefault(_stoneEntity.Color);
 		spriteRenderer.color = color;
+	}
+
+    public void MoveToTile(Tile tile)
+    {
+		var position = new Vector2(tile.X, tile.Y);
+		transform.position = position;
+		Log.Error($"Moving to {position}");
 	}
 
     public void SetEntityPosition(int x, int y)

@@ -1,7 +1,7 @@
-//This, in and of itself, is opposed to a few rules of OOP i guess but i want to see how this turns out other than a gazillion interfaces and concretes
 using System.Collections.Generic;
 using UnityEngine;
 
+//This, in and of itself, is opposed to a few rules of OOP i guess but i want to see how this turns out other than a gazillion interfaces and concretes
 public class TileEntityFactory : ITileEntityFactory
 {
 	private Transform _entityParent;
